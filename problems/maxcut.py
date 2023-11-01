@@ -1,10 +1,11 @@
-from problem import Problem
+from problems.problem import Problem
 import networkx as nx
 from itertools import combinations, groupby
 import random
 import pyqubo
 import numpy as np
 from typing import Tuple
+import matplotlib.pyplot as plt
 
 
 def gnp_random_connected_graph(n: int, p: float) -> nx.Graph:
@@ -51,7 +52,8 @@ class MaxCut(Problem):
         self.n_nodes = n_nodes
         self.edge_prob = edge_prob
 
-    def _create_model(self) -> pyqubo.Model:
+    def _create_model(self, seed) -> pyqubo.Model:
+        random.seed(seed)
         g = gnp_random_connected_graph(self.n_nodes, self.edge_prob)
 
         # Cf. "A Tutorial on Formulating and Using QUBO Models" by Fred Glover, Gary Kochenberger, Yu Du
@@ -73,9 +75,8 @@ class MaxCut(Problem):
         :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a tuple
         containing the Q matrix as a numpy array and the energy offset as a float.
         """
-        random.seed(seed)
-        model = self._create_model()
-        qubo, offset = model.to_qubo(feed_dict=None)
+        model = self._create_model(seed)
+        qubo, offset = model.to_qubo()
         qubo_array = np.zeros((self.n_nodes, self.n_nodes))
         for k, v in qubo.items():
             # Is symmetric
@@ -93,7 +94,7 @@ class MaxCut(Problem):
         """
         random.seed(seed)
         model = self._create_model()
-        linear, quadratic, offset = model.to_ising(feed_dict=None)
+        linear, quadratic, offset = model.to_ising()
         quadratic_array = np.zeros((self.n_nodes, self.n_nodes))
         for k, v in quadratic.items():
             # Is symmetric
@@ -102,3 +103,24 @@ class MaxCut(Problem):
         # MaxCut linear part is always empty
         linear_array = np.zeros(self.n_nodes)
         return linear_array, quadratic_array, offset
+
+    def visualize(self, seed: int, x: np.ndarray) -> None:
+        """
+        Gives a visualization of the solution.
+
+        :param seed: Seed to recreate the problem.
+        :param x: The solution to visualize.
+        """
+        random.seed(seed)
+        g = gnp_random_connected_graph(self.n_nodes, self.edge_prob)
+        color_map = []
+        for i in x:
+            if i == 1:
+                color_map.append('blue')
+            else:
+                color_map.append('green')
+        nx.draw_networkx(g, node_color=color_map)
+        ax = plt.gca()
+        ax.margins(0.20)
+        plt.axis("off")
+        plt.show()

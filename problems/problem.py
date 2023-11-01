@@ -29,3 +29,13 @@ class Problem(ABC):
         containing the linear and quadratic matrices as a numpy arrays and the energy offset as a float.
         """
         pass
+
+    @abstractmethod
+    def visualize(self, seed: int, x: np.ndarray) -> None:
+        """
+        Gives a visualization of the solution.
+
+        :param seed: Seed to recreate the problem.
+        :param x: The solution to visualize.
+        """
+        pass

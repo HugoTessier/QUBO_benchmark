@@ -1,3 +1,3 @@
-from maxcut import MaxCut
+from problems.maxcut import MaxCut
 
 __all__ = ['MaxCut']
