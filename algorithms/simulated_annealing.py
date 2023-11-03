@@ -38,33 +38,25 @@ class SimulatedAnnealing(Algorithm):
         x = self.generate_random_qubo_solution(n)
         energy = self.compute_qubo(x, qubo, offset)
         energy_deltas = []
-        energy_calculations = 1
-        history.append([energy_calculations, energy])
         for step in range(self.outer_loop_steps):
             for index in np.random.choice(n, n, replace=False):
                 x_modified = self.flip_bit(x, index)
                 new_energy = self.compute_qubo(x_modified, qubo, offset)
-                energy_calculations += 1
                 if step == 0:
                     energy_deltas.append(energy - new_energy)
                     # First iterations acts as if the probability equals 100%
                     x = x_modified
                     energy = new_energy
-                    history.append([energy_calculations, energy])
                 else:
                     if new_energy < energy:
                         x = x_modified
                         energy = new_energy
-                        history.append([energy_calculations, energy])
                     else:
                         if random.uniform(0, 1) <= self.probability(energy, new_energy, temperature):
                             x = x_modified
                             energy = new_energy
-                            history.append([energy_calculations, energy])
+            history.append([step, energy])
             if step == 0:
                 temperature = self.compute_initial_temperature(energy_deltas)
             temperature = self.update_temperature(temperature)
         return x, history
-
-    def solve_ising(self, linear: np.ndarray, quadratic: np.ndarray, offset: float):
-        pass
