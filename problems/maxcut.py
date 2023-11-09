@@ -79,10 +79,24 @@ class MaxCut(Problem):
         qubo, offset = model.to_qubo()
         qubo_array = np.zeros((self.n_nodes, self.n_nodes))
         for k, v in qubo.items():
-            # Is symmetric
             qubo_array[int(k[0]), int(k[1])] = v
-            qubo_array[int(k[1]), int(k[0])] = v
         return qubo_array, offset
+
+    def ising(self, seed: int = 0) -> Tuple[np.ndarray, np.ndarray, float]:
+        """
+        Generate an instance of the MaxCut problem, depending on a seed, and returns its corresponding Ising model.
+
+        :param seed: Seed to generate the problem.
+        :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of a tuple
+        containing the h and J matrices as numpy arrays and the energy offset as a float.
+        """
+        model = self._create_model(seed)
+        linear, quadratic, offset = model.to_ising()
+        quadratic_array = np.zeros((self.n_nodes, self.n_nodes))
+        for k, v in quadratic.items():
+            quadratic_array[int(k[0]), int(k[1])] = v
+        linear = np.zeros(self.n_nodes)  # Linear part in MaxCut is zero
+        return linear, quadratic_array, offset
 
     def visualize(self, seed: int, x: np.ndarray) -> None:
         """
