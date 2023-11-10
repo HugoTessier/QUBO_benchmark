@@ -11,11 +11,11 @@ class SamplerIterator(ABC):
 
     @abstractmethod
     def __iter__(self):
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def __next__(self):
-        pass
+        raise NotImplementedError
 
 
 def range_sampler(n):

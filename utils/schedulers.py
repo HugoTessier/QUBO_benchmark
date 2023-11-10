@@ -18,7 +18,7 @@ class Scheduler(ABC):
 
         :return: The new value of the parameter.
         """
-        pass
+        raise NotImplementedError
 
 
 class LinearScheduler(Scheduler):

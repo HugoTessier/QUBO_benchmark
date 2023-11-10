@@ -61,9 +61,10 @@ class MaxCut(Problem):
         hamiltonian = None
         for e in nx.edges(g):
             if hamiltonian is None:
-                hamiltonian = (2 * binaries[e[0]] * binaries[e[1]]) - binaries[e[0]] - binaries[e[1]]
+                # TODO: Add weights
+                hamiltonian = ((2 * binaries[e[0]] * binaries[e[1]]) - binaries[e[0]] - binaries[e[1]])
             else:
-                hamiltonian += (2 * binaries[e[0]] * binaries[e[1]]) - binaries[e[0]] - binaries[e[1]]
+                hamiltonian += ((2 * binaries[e[0]] * binaries[e[1]]) - binaries[e[0]] - binaries[e[1]])
         model = hamiltonian.compile()
         return model
 

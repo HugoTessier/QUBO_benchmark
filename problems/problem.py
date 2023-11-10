@@ -17,7 +17,7 @@ class Problem(ABC):
         :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a tuple
         containing the Q matrix as a numpy array and the energy offset as a float.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def ising(self, seed: int = 0) -> Tuple[np.ndarray, np.ndarray, float]:
@@ -28,7 +28,7 @@ class Problem(ABC):
         :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of a tuple
         containing the h and J matrices as numpy arrays and the energy offset as a float.
         """
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def visualize(self, seed: int, x: np.ndarray) -> None:
@@ -38,4 +38,4 @@ class Problem(ABC):
         :param seed: Seed to recreate the problem.
         :param x: The solution to visualize.
         """
-        pass
+        raise NotImplementedError
