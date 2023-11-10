@@ -5,14 +5,14 @@ from typing import Tuple
 
 class Algorithm(ABC):
     """
-    Any algorithm that is able to solve a QUBO problem.
+    Any algorithm that is able to solve a combinatorial optimization problem.
     """
 
     @staticmethod
     @abstractmethod
     def generate_random_solution(length: int) -> np.ndarray:
         """
-        Generates a random vector of bits in {0,1} of a given length.
+        Generates a random solution, for a CO problem, of given length.
 
         :param length: Length of the vector to generate.
         :return: The generated vector.
@@ -23,29 +23,35 @@ class Algorithm(ABC):
     @abstractmethod
     def compute_energy(x, *args, **kwargs) -> float:
         """
-        Computes the Hamiltonian energy of the QUBO problem.
+        Computes the Hamiltonian energy of the CO problem.
 
         :param x: The solution whose energy to evaluate.
-        :param qubo: The matrix of the coupling coefficients of the QUBO problem.
-        :param offset: Offset value of the energy.
         :return: The evaluated Hamiltonian energy.
         """
+        # args and kwargs are here to be replaced with qubo + offset
+        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
 
     @staticmethod
     @abstractmethod
     def get_length(*args, **kwargs) -> int:
+        """
+        Gets the length of the solution to provide to the CO problem.
+        :return: The length.
+        """
+        # args and kwargs are here to be replaced with qubo + offset
+        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
 
     @abstractmethod
     def __call__(self, *args, **kwargs) -> Tuple:
         """
-        Solves a QUBO problem using a given algorithm.
+        Solves a CO problem using a given algorithm.
 
-        :param qubo: The matrix of the coupling coefficients of the QUBO problem.
-        :param offset: Offset value of the energy.
         :return: The solution and a history of the optimization process.
         """
+        # args and kwargs are here to be replaced with qubo + offset
+        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
 
 
@@ -117,7 +123,7 @@ class AlgorithmIsing(Algorithm):
         Computes the Hamiltonian energy of the Ising problem.
 
         :param x: The solution whose energy to evaluate.
-        :param linear: The vector of the local field coefficients of the Ising problem.
+        :param linear: The vector of the local magnetic field coefficients of the Ising problem.
         :param quadratic: The matrix of the coupling coefficients of the Ising problem.
         :param offset: Offset value of the energy.
         :return: The evaluated Hamiltonian energy.
@@ -133,7 +139,7 @@ class AlgorithmIsing(Algorithm):
         """
         Solves a QUBO problem using a given algorithm.
 
-        :param linear: The vector of the local field coefficients of the Ising problem.
+        :param linear: The vector of the local magnetic field coefficients of the Ising problem.
         :param quadratic: The matrix of the coupling coefficients of the Ising problem.
         :param offset: Offset value of the energy.
         :return: The solution and a history of the optimization process.
