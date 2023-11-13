@@ -76,7 +76,10 @@ class MaxCutGSET(Problem):
         qubo, offset = model.to_qubo()
         qubo_array = np.zeros((n_nodes, n_nodes))
         for k, v in qubo.items():
-            qubo_array[int(k[0]), int(k[1])] = v
+            # QUBO matrix is upper-triangular
+            n1 = min(int(k[0]), int(k[1]))
+            n2 = max(int(k[0]), int(k[1]))
+            qubo_array[n1, n2] = v
         return qubo_array, offset
 
     def ising(self, seed: int = 0) -> Tuple[np.ndarray, np.ndarray, float]:
@@ -91,7 +94,10 @@ class MaxCutGSET(Problem):
         linear, quadratic, offset = model.to_ising()
         quadratic_array = np.zeros((n_nodes, n_nodes))
         for k, v in quadratic.items():
-            quadratic_array[int(k[0]), int(k[1])] = v
+            # Quadratic matrix is upper-triangular
+            n1 = min(int(k[0]), int(k[1]))
+            n2 = max(int(k[0]), int(k[1]))
+            quadratic_array[n1, n2] = v
         linear = np.zeros(n_nodes)  # Linear part in MaxCut is zero
         return linear, quadratic_array, offset
 

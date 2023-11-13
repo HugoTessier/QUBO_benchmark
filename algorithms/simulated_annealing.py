@@ -42,41 +42,14 @@ class SimulatedAnnealingCommon(Algorithm):
 
     @staticmethod
     @abstractmethod
-    def _compute_energy_delta(x: np.ndarray, local_energy_field: np.ndarray, i: int) -> np.ndarray:
+    def _compute_energy_delta(x: np.ndarray, i: int, *args, **kwargs) -> np.ndarray:
         """
         Gives the variation in energy when changing the element i of x.
 
         :param x: The candidate solution whose variations in energy we want to measure when changing the element i.
-        :param local_energy_field: Energy associated to each element of x, in order to simplify calculations.
         :param i: Index of an element of x.
 
         :return: The variation of energy when changing the element i of x.
-        """
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def _initialize_local_energy_field(x: np.ndarray, *args, **kwargs) -> np.ndarray:
-        """
-        Initializes the local energy field of x.
-        :param x: The solution whose energy field to compute.
-        :return: The local energy field.
-        """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def _update_local_energy_field(local_energy_field, x, i, *args, **kwargs) -> np.ndarray:
-        """
-        Updates the local energy field.
-
-        :param local_energy_field: The energy field to update.
-        :param x: The candidate solution that has changed and whose energy field we must update.
-        :param i: Element i of any trotter of x.
-
-        :return: The updated local energy field.
         """
         # args and kwargs are here to be replaced with qubo + offset
         # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
@@ -89,18 +62,13 @@ class SimulatedAnnealingCommon(Algorithm):
         length = self.get_length(*args, **kwargs)
         x = self.generate_random_solution(length)
 
-        # Since the hamiltonian is purely a sum, the energy delta induced by changing one element of x at a time
-        # can be calculated using only a "local" energy. It is then more efficient to compute said "local energy" field
-        # beforehand and to update it progressively.
-        local_energy_field = self._initialize_local_energy_field(x, *args, **kwargs)
-
         history = []  # We monitor the energy evolution at each Monte-Carlo step
         for step in range(self.monte_carlo_steps):
             history.append([step, self.compute_energy(x, *args, **kwargs)])
 
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
             for index in self.sampler(length):
-                delta_energy = self._compute_energy_delta(x, local_energy_field, index)
+                delta_energy = self._compute_energy_delta(x, index, *args, **kwargs)
 
                 # Metropolis algorithm: the random number is in [0,1]; if the tested change in x reduces the
                 # energy, then exp(-delta_energy / temperature) > 1 and the change is accepted; otherwise, we have
@@ -108,8 +76,6 @@ class SimulatedAnnealingCommon(Algorithm):
                 # way, with decreasing chances as the energy increase becomes larger.
                 if math.exp(min(-delta_energy / temperature, 1)) > random.random():  # min() to avoid math range error
                     x = self._flip_element(x, index)
-                    local_energy_field = self._update_local_energy_field(local_energy_field, x, index,
-                                                                         *args, **kwargs)
 
         history.append([self.monte_carlo_steps, self.compute_energy(x, *args, **kwargs)])
         return x, history
@@ -124,19 +90,12 @@ class SimulatedAnnealingQUBO(AlgorithmQUBO, SimulatedAnnealingCommon):
         return x
 
     @staticmethod
-    def _compute_energy_delta(x, local_energy_field, i) -> np.ndarray:
-        flip_direction = 1 if x[i] == 0 else -1
-        return local_energy_field[i] * flip_direction
-
-    @staticmethod
-    def _initialize_local_energy_field(x, qubo, offset) -> np.ndarray:
-        return np.dot(qubo, x)
-
-    @staticmethod
-    def _update_local_energy_field(local_energy_field, x, i, qubo, offset) -> np.ndarray:
-        flip_direction = 1 if x[i] == 1 else -1
-        local_energy_field += (flip_direction * qubo[i, :])
-        return local_energy_field
+    def _compute_energy_delta(x: np.ndarray, i: int, qubo: np.ndarray, offset: float) -> np.ndarray:
+        # The diagonal coefficients of the QUBO matrix are NOT zeros
+        # Simplification: the QUBO matrix is upper-triangular
+        s = np.dot(qubo[i, i:], x[i:]) + np.dot(qubo[:i + 1, i], x[:i + 1]) + (qubo[i, i] * (1 - (2 * x[i])))
+        flip_direction = 1 if x[i] == 0 else -1  # x_after - x_before
+        return flip_direction * s
 
     def __call__(self, qubo: np.ndarray, offset: float) -> Tuple:
         """
@@ -155,17 +114,15 @@ class SimulatedAnnealingIsing(AlgorithmIsing, SimulatedAnnealingCommon):
         return x
 
     @staticmethod
-    def _compute_energy_delta(x, local_energy_field, i) -> np.ndarray:
-        return - 2 * x[i] * local_energy_field[i]  # - because before spin update
-
-    @staticmethod
-    def _initialize_local_energy_field(x, linear, quadratic, offset) -> np.ndarray:
-        return np.dot(quadratic, x) + linear
-
-    @staticmethod
-    def _update_local_energy_field(local_energy_field, x, i, linear, quadratic, offset) -> np.ndarray:
-        local_energy_field += 2 * quadratic[i, :] * x[i]  # + because after spin update
-        return local_energy_field
+    def _compute_energy_delta(x: np.ndarray,
+                              i: int,
+                              linear: np.ndarray,
+                              quadratic: np.ndarray,
+                              offset: float) -> np.ndarray:
+        # Simplification n°1: the diagonal coefficients of the quadratic matrix are zeros
+        # Simplification n°2: the quadratic matrix is upper-triangular
+        s = np.dot(quadratic[i, i + 1:], x[i + 1:]) + np.dot(quadratic[:i, i], x[:i])
+        return -2 * ((x[i] * s) + linear[i])
 
     def __call__(self, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> Tuple:
         """
