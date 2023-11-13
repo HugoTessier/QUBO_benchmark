@@ -2,6 +2,7 @@ from algorithms.simulated_annealing import SimulatedAnnealingQUBO, SimulatedAnne
 from algorithms.simulated_quantum_annealing import SimulatedQuantumAnnealingQUBO, SimulatedQuantumAnnealingIsing
 from algorithms.simulated_bifurcation import BallisticSimulatedBifurcationQUBO, DiscreteSimulatedBifurcationQUBO, \
     BallisticSimulatedBifurcationIsing, DiscreteSimulatedBifurcationIsing
+from algorithms.baseline import qubo_baseline, ising_baseline
 
 __all__ = ['SimulatedAnnealingQUBO',
            'SimulatedAnnealingIsing',
@@ -10,4 +11,6 @@ __all__ = ['SimulatedAnnealingQUBO',
            'BallisticSimulatedBifurcationQUBO',
            'DiscreteSimulatedBifurcationQUBO',
            'BallisticSimulatedBifurcationIsing',
-           'DiscreteSimulatedBifurcationIsing']
+           'DiscreteSimulatedBifurcationIsing',
+           'qubo_baseline',
+           'ising_baseline']

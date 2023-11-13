@@ -98,6 +98,15 @@ class MaxCutGSET(Problem):
     def visualize(self, seed: int, x: np.ndarray) -> None:
         raise NotImplementedError
 
+    def get_gset_info(self, seed: int = 0) -> Tuple:
+        """
+        Returns info related to GSET problem of given index.
+        :param seed: Index of said problem in the list of GSET MaxCut problems.
+        :return: A tuple containing the name, the number of nodes and the est known score.
+        """
+        key = list(self.gset_content.keys())[seed]
+        return key, self.gset_content[key]['n_nodes'], self.gset_content[key]['best']
+
 
 """
 Summary of the content of the 71 GSET MaxCut problems:
