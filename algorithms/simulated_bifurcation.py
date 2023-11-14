@@ -1,4 +1,4 @@
-from algorithms.algorithm import AlgorithmQUBO, AlgorithmIsing, Algorithm
+from algorithms.algorithm import AlgorithmIsing, Algorithm
 import numpy as np
 from typing import Tuple
 import math
@@ -122,48 +122,6 @@ class SimulatedBifurcationCommon(Algorithm):
         return x, history
 
 
-class SimulatedBifurcationQUBO(AlgorithmQUBO, SimulatedBifurcationCommon):
-    """QUBO version of SB."""
-
-    @staticmethod
-    def _compute_c0(qubo: np.ndarray, offset: float) -> float:
-        n = qubo.shape[0]
-        return 0.5 / (math.sqrt((qubo ** 2).sum() / (n * (n - 1))) * math.sqrt(n))
-
-    @staticmethod
-    def _binarize(x: np.ndarray) -> np.ndarray:
-        return (x > 0.5).astype(float)
-
-    @staticmethod
-    def _clip(x: np.ndarray, momenta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        momenta[np.where(np.bitwise_or(x > 1, x < 0))] = 0
-        x = np.clip(x, 0, 1)
-        return x, momenta
-
-    def initialize_vector(self, length: int) -> np.ndarray:
-        return (np.random.random(length) - 0.5) * self.initialization_range + 0.5
-
-    @abstractmethod
-    def _compute_momenta_variation(self,
-                                   x: np.ndarray,
-                                   a: float,
-                                   c0: float,
-                                   qubo: np.ndarray,
-                                   offset: np.ndarray) -> np.ndarray:
-        """
-        :param qubo: Coupling coefficients of the QUBO problem.*
-        :param offset: Energy offset of the QUBO problem.
-        """
-        raise NotImplementedError
-
-    def __call__(self, qubo: np.ndarray, offset: float) -> Tuple:
-        """
-        :param qubo: Coupling coefficients of the QUBO problem.*
-        :param offset: Energy offset of the QUBO problem.
-        """
-        return super().__call__(qubo, offset)
-
-
 class SimulatedBifurcationIsing(AlgorithmIsing, SimulatedBifurcationCommon):
     """Ising model version of SB."""
 
@@ -210,30 +168,6 @@ class SimulatedBifurcationIsing(AlgorithmIsing, SimulatedBifurcationCommon):
         return super().__call__(linear, quadratic, offset)
 
 
-class DiscreteSimulatedBifurcationQUBO(SimulatedBifurcationQUBO):
-    """QUBO version of DSB."""
-
-    def _compute_momenta_variation(self,
-                                   x: np.ndarray,
-                                   a: float,
-                                   c0: float,
-                                   qubo: np.ndarray,
-                                   offset: np.ndarray) -> np.ndarray:
-        return self.delta_t * (-((self.a0 - a) * (x - 0.5)) + (c0 * (-qubo * self._binarize(x)).sum(axis=1)))
-
-
-class BallisticSimulatedBifurcationQUBO(SimulatedBifurcationQUBO):
-    """QUBO version of BSB."""
-
-    def _compute_momenta_variation(self,
-                                   x: np.ndarray,
-                                   a: float,
-                                   c0: float,
-                                   qubo: np.ndarray,
-                                   offset: np.ndarray) -> np.ndarray:
-        return self.delta_t * (-((self.a0 - a) * (x - 0.5)) + (c0 * (-qubo * x).sum(axis=1)))
-
-
 class DiscreteSimulatedBifurcationIsing(SimulatedBifurcationIsing):
     """Ising model version of DSB."""
 
@@ -244,7 +178,7 @@ class DiscreteSimulatedBifurcationIsing(SimulatedBifurcationIsing):
                                    linear: np.ndarray,
                                    quadratic: np.ndarray,
                                    offset: float) -> np.ndarray:
-        return self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * self._binarize(x)).sum(axis=1) + linear)))
+        return -self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * self._binarize(x)).sum(axis=1) + linear)))
 
 
 class BallisticSimulatedBifurcationIsing(SimulatedBifurcationIsing):
@@ -257,4 +191,4 @@ class BallisticSimulatedBifurcationIsing(SimulatedBifurcationIsing):
                                    linear: np.ndarray,
                                    quadratic: np.ndarray,
                                    offset: float) -> np.ndarray:
-        return self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * x).sum(axis=1) + linear)))
+        return - self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * x).sum(axis=1) + linear)))
