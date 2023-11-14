@@ -42,7 +42,7 @@ class SimulatedAnnealingCommon(Algorithm):
 
     @staticmethod
     @abstractmethod
-    def _compute_energy_delta(x: np.ndarray, i: int, *args, **kwargs) -> np.ndarray:
+    def _compute_energy_delta(x: np.ndarray, i: int, local_energy: np.ndarray, *args, **kwargs) -> np.ndarray:
         """
         Gives the variation in energy when changing the element i of x.
 
@@ -55,12 +55,23 @@ class SimulatedAnnealingCommon(Algorithm):
         # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
 
+    @staticmethod
+    @abstractmethod
+    def _initialize_local_energy(x: np.ndarray, *args, **kwargs) -> np.ndarray:
+        raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def _update_local_energy(local_energy: np.ndarray, x: np.ndarray, i: int, *args, **kwargs) -> np.ndarray:
+        raise NotImplementedError
+
     def __call__(self, *args, **kwargs) -> Tuple:
         # args and kwargs are here to be replaced with qubo + offset
         # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
 
         length = self.get_length(*args, **kwargs)
         x = self.generate_random_solution(length)
+        local_energy = self._initialize_local_energy(x, *args, **kwargs)
 
         history = []  # We monitor the energy evolution at each Monte-Carlo step
         for step in range(self.monte_carlo_steps):
@@ -68,7 +79,7 @@ class SimulatedAnnealingCommon(Algorithm):
 
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
             for index in self.sampler(length):
-                delta_energy = self._compute_energy_delta(x, index, *args, **kwargs)
+                delta_energy = self._compute_energy_delta(x, index, local_energy, *args, **kwargs)
 
                 # Metropolis algorithm: the random number is in [0,1]; if the tested change in x reduces the
                 # energy, then exp(-delta_energy / temperature) > 1 and the change is accepted; otherwise, we have
@@ -76,6 +87,7 @@ class SimulatedAnnealingCommon(Algorithm):
                 # way, with decreasing chances as the energy increase becomes larger.
                 if math.exp(min(-delta_energy / temperature, 1)) > random.random():  # min() to avoid math range error
                     x = self._flip_element(x, index)
+                    local_energy = self._update_local_energy(local_energy, x, index, *args, **kwargs)
 
         history.append([self.monte_carlo_steps, self.compute_energy(x, *args, **kwargs)])
         return x, history
@@ -90,12 +102,27 @@ class SimulatedAnnealingQUBO(AlgorithmQUBO, SimulatedAnnealingCommon):
         return x
 
     @staticmethod
-    def _compute_energy_delta(x: np.ndarray, i: int, qubo: np.ndarray, offset: float) -> np.ndarray:
-        # The diagonal coefficients of the QUBO matrix are NOT zeros
-        # Simplification: the QUBO matrix is upper-triangular
-        s = np.dot(qubo[i, i:], x[i:]) + np.dot(qubo[:i + 1, i], x[:i + 1]) + (qubo[i, i] * (1 - (2 * x[i])))
+    def _compute_energy_delta(x: np.ndarray,
+                              i: int,
+                              local_energy: np.ndarray,
+                              qubo: np.ndarray,
+                              offset: float) -> np.ndarray:
         flip_direction = 1 if x[i] == 0 else -1  # x_after - x_before
-        return flip_direction * s
+        return flip_direction * (local_energy[i] + (qubo[i, i] * (1 - (2 * x[i]))))
+
+    @staticmethod
+    def _initialize_local_energy(x: np.ndarray, qubo: np.ndarray, offset: float) -> np.ndarray:
+        return np.dot(qubo, x) + np.dot(qubo.T, x)
+
+    @staticmethod
+    def _update_local_energy(local_energy: np.ndarray,
+                             x: np.ndarray,
+                             i: int,
+                             qubo: np.ndarray,
+                             offset: float) -> np.ndarray:
+        flip_direction = -1 if x[i] == 0 else 1
+        local_energy += flip_direction * (qubo[:, i] + qubo[i, :])
+        return local_energy
 
     def __call__(self, qubo: np.ndarray, offset: float) -> Tuple:
         """
@@ -116,13 +143,28 @@ class SimulatedAnnealingIsing(AlgorithmIsing, SimulatedAnnealingCommon):
     @staticmethod
     def _compute_energy_delta(x: np.ndarray,
                               i: int,
+                              local_energy: np.ndarray,
                               linear: np.ndarray,
                               quadratic: np.ndarray,
                               offset: float) -> np.ndarray:
-        # Simplification n°1: the diagonal coefficients of the quadratic matrix are zeros
-        # Simplification n°2: the quadratic matrix is upper-triangular
-        s = np.dot(quadratic[i, i + 1:], x[i + 1:]) + np.dot(quadratic[:i, i], x[:i])
-        return -2 * ((x[i] * s) + linear[i])
+        return (-2 * x[i]) * (local_energy[i] - (2 * quadratic[i, i] * x[i]) + linear[i])
+
+    @staticmethod
+    def _initialize_local_energy(x: np.ndarray,
+                                 linear: np.ndarray,
+                                 quadratic: np.ndarray,
+                                 offset: float) -> np.ndarray:
+        return np.dot(quadratic, x) + np.dot(quadratic.T, x)
+
+    @staticmethod
+    def _update_local_energy(local_energy: np.ndarray,
+                             x: np.ndarray,
+                             i: int,
+                             linear: np.ndarray,
+                             quadratic: np.ndarray,
+                             offset: float) -> np.ndarray:
+        local_energy += 2 * x[i] * (quadratic[:, i] + quadratic[i, :])
+        return local_energy
 
     def __call__(self, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> Tuple:
         """
