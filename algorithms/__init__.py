@@ -1,17 +1,17 @@
-from algorithms.simulated_annealing import SimulatedAnnealingQUBO, SimulatedAnnealingIsing
-from algorithms.simulated_quantum_annealing import SimulatedQuantumAnnealingQUBO, SimulatedQuantumAnnealingIsing
-from algorithms.simulated_bifurcation import BallisticSimulatedBifurcationIsing, DiscreteSimulatedBifurcationIsing
+from algorithms.simulated_annealing import QSimulatedAnnealing, ISimulatedAnnealing
+from algorithms.simulated_quantum_annealing import QSimulatedQuantumAnnealing, ISimulatedQuantumAnnealing
+from algorithms.simulated_bifurcation import IBallisticSimulatedBifurcation, IDiscreteSimulatedBifurcation
 from algorithms.baseline import qubo_baseline, ising_baseline
-from algorithms.stochastic_simulated_annealing import StochasticSimulatedAnnealingIsing
-from algorithms.stochastic_simulated_quantum_annealing import StochasticSimulatedQuantumAnnealingIsing
+from algorithms.stochastic_simulated_annealing import IStochasticSimulatedAnnealing
+from algorithms.stochastic_simulated_quantum_annealing import IStochasticSimulatedQuantumAnnealing
 
-__all__ = ['SimulatedAnnealingQUBO',
-           'SimulatedAnnealingIsing',
-           'SimulatedQuantumAnnealingQUBO',
-           'SimulatedQuantumAnnealingIsing',
-           'BallisticSimulatedBifurcationIsing',
-           'DiscreteSimulatedBifurcationIsing',
-           'StochasticSimulatedAnnealingIsing',
-           'StochasticSimulatedQuantumAnnealingIsing',
+__all__ = ['QSimulatedAnnealing',
+           'ISimulatedAnnealing',
+           'QSimulatedQuantumAnnealing',
+           'ISimulatedQuantumAnnealing',
+           'IBallisticSimulatedBifurcation',
+           'IDiscreteSimulatedBifurcation',
+           'IStochasticSimulatedAnnealing',
+           'IStochasticSimulatedQuantumAnnealing',
            'qubo_baseline',
            'ising_baseline']

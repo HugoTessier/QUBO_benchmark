@@ -1,10 +1,10 @@
-from algorithms.algorithm import AlgorithmIsing
+from algorithms.algorithm import IAlgorithm
 import numpy as np
 from typing import Tuple
 from utils.schedulers import Scheduler, GeometricScheduler
 
 
-class StochasticSimulatedAnnealingIsing(AlgorithmIsing):
+class IStochasticSimulatedAnnealing(IAlgorithm):
     """
     Based on "Fast-Converging Simulated Annealing for Ising Models Based on Integral Stochastic Computing"
     by Naoya Onizawa, Kota Katsuki, Duckgyu Shin, Warren J. Gross and Takahiro Hanyu

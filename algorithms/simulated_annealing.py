@@ -1,4 +1,4 @@
-from algorithms.algorithm import AlgorithmQUBO, AlgorithmIsing, Algorithm
+from algorithms.algorithm import QAlgorithm, IAlgorithm, Algorithm
 import numpy as np
 import random
 import math
@@ -114,7 +114,7 @@ class SimulatedAnnealingCommon(Algorithm):
         return x, history
 
 
-class SimulatedAnnealingQUBO(AlgorithmQUBO, SimulatedAnnealingCommon):
+class QSimulatedAnnealing(QAlgorithm, SimulatedAnnealingCommon):
     """QUBO version of SA."""
 
     @staticmethod
@@ -153,7 +153,7 @@ class SimulatedAnnealingQUBO(AlgorithmQUBO, SimulatedAnnealingCommon):
         return super().__call__(qubo, offset)
 
 
-class SimulatedAnnealingIsing(AlgorithmIsing, SimulatedAnnealingCommon):
+class ISimulatedAnnealing(IAlgorithm, SimulatedAnnealingCommon):
     """Ising model version of SA."""
 
     @staticmethod

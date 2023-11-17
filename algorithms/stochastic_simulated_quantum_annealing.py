@@ -1,4 +1,4 @@
-from algorithms.algorithm import AlgorithmQUBO, AlgorithmIsing, Algorithm
+from algorithms.algorithm import QAlgorithm, IAlgorithm, Algorithm
 import numpy as np
 from abc import abstractmethod
 from typing import Tuple, Callable
@@ -6,7 +6,7 @@ from utils.schedulers import Scheduler, GeometricScheduler, LinearScheduler
 from utils.sampling import range_sampler
 
 
-class StochasticSimulatedQuantumAnnealingIsing(AlgorithmIsing):
+class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
     """
     Based on "Fast-Converging Simulated Annealing for Ising Models Based on Integral Stochastic Computing"
     by Naoya Onizawa, Kota Katsuki, Duckgyu Shin, Warren J. Gross and Takahiro Hanyu

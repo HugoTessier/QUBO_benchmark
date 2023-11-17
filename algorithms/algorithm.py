@@ -55,7 +55,7 @@ class Algorithm(ABC):
         raise NotImplementedError
 
 
-class AlgorithmQUBO(Algorithm):
+class QAlgorithm(Algorithm):
     """
     Any algorithm that is able to solve a QUBO problem.
     """
@@ -100,7 +100,7 @@ class AlgorithmQUBO(Algorithm):
         return super().__call__(qubo, offset)
 
 
-class AlgorithmIsing(Algorithm):
+class IAlgorithm(Algorithm):
     """
     Any algorithm that is able to solve an Ising problem.
     """

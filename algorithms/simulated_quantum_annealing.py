@@ -1,4 +1,4 @@
-from algorithms.algorithm import AlgorithmQUBO, AlgorithmIsing, Algorithm
+from algorithms.algorithm import QAlgorithm, IAlgorithm, Algorithm
 import numpy as np
 import math
 import random
@@ -182,7 +182,7 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
         raise NotImplementedError
 
 
-class SimulatedQuantumAnnealingQUBO(AlgorithmQUBO, SimulatedQuantumAnnealingCommon):
+class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
     """
     QUBO version of SQA.
     We adapted some calculations to fit QUBO solutions in {0, 1} instead of {-1, 1}.
@@ -242,7 +242,7 @@ class SimulatedQuantumAnnealingQUBO(AlgorithmQUBO, SimulatedQuantumAnnealingComm
         return super().__call__(qubo, offset)
 
 
-class SimulatedQuantumAnnealingIsing(AlgorithmIsing, SimulatedQuantumAnnealingCommon):
+class ISimulatedQuantumAnnealing(IAlgorithm, SimulatedQuantumAnnealingCommon):
     """Ising model version of SQA."""
 
     def _compute_energy_delta(self,

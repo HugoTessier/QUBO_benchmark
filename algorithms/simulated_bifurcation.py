@@ -1,4 +1,4 @@
-from algorithms.algorithm import AlgorithmIsing, Algorithm
+from algorithms.algorithm import IAlgorithm, Algorithm
 import numpy as np
 from typing import Tuple
 import math
@@ -122,7 +122,7 @@ class SimulatedBifurcationCommon(Algorithm):
         return x, history
 
 
-class SimulatedBifurcationIsing(AlgorithmIsing, SimulatedBifurcationCommon):
+class ISimulatedBifurcation(IAlgorithm, SimulatedBifurcationCommon):
     """Ising model version of SB."""
 
     @staticmethod
@@ -168,7 +168,7 @@ class SimulatedBifurcationIsing(AlgorithmIsing, SimulatedBifurcationCommon):
         return super().__call__(linear, quadratic, offset)
 
 
-class DiscreteSimulatedBifurcationIsing(SimulatedBifurcationIsing):
+class IDiscreteSimulatedBifurcation(ISimulatedBifurcation):
     """Ising model version of DSB."""
 
     def _compute_momenta_variation(self,
@@ -181,7 +181,7 @@ class DiscreteSimulatedBifurcationIsing(SimulatedBifurcationIsing):
         return -self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * self._binarize(x)).sum(axis=1) + linear)))
 
 
-class BallisticSimulatedBifurcationIsing(SimulatedBifurcationIsing):
+class IBallisticSimulatedBifurcation(ISimulatedBifurcation):
     """Ising model version of BSB."""
 
     def _compute_momenta_variation(self,

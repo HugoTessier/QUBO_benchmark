@@ -1,4 +1,4 @@
-from algorithms.algorithm import AlgorithmQUBO, AlgorithmIsing
+from algorithms.algorithm import QAlgorithm, IAlgorithm
 import numpy as np
 
 
@@ -12,10 +12,10 @@ def qubo_baseline(n_trials: int, qubo: np.ndarray, offset: float) -> float:
     :return: The average energy.
     """
     energies = []
-    length = AlgorithmQUBO.get_length(qubo, offset)
+    length = QAlgorithm.get_length(qubo, offset)
     for _ in range(n_trials):
-        x = AlgorithmQUBO.generate_random_solution(length)
-        energies.append(AlgorithmQUBO.compute_energy(x, qubo, offset))
+        x = QAlgorithm.generate_random_solution(length)
+        energies.append(QAlgorithm.compute_energy(x, qubo, offset))
     return np.mean(np.array(energies))
 
 
@@ -30,8 +30,8 @@ def ising_baseline(n_trials: int, linear: np.ndarray, quadratic: np.ndarray, off
     :return: The average energy.
     """
     energies = []
-    length = AlgorithmIsing.get_length(linear, quadratic, offset)
+    length = IAlgorithm.get_length(linear, quadratic, offset)
     for _ in range(n_trials):
-        x = AlgorithmIsing.generate_random_solution(length)
-        energies.append(AlgorithmIsing.compute_energy(x, linear, quadratic, offset))
+        x = IAlgorithm.generate_random_solution(length)
+        energies.append(IAlgorithm.compute_energy(x, linear, quadratic, offset))
     return np.mean(np.array(energies))

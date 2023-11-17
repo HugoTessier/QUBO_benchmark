@@ -17,18 +17,18 @@ if __name__ == '__main__':
     baseline_ising = ising_baseline(100, linear, quadratic, ising_offset)
 
     qubo_solvers = {
-        'Simulated Annealing QUBO': SimulatedAnnealingQUBO(monte_carlo_steps=nsteps),
-        'Simulated Quantum Annealing QUBO': SimulatedQuantumAnnealingQUBO(monte_carlo_steps=nsteps,
-                                                                          n_trotters=10),
+        'Simulated Annealing QUBO': QSimulatedAnnealing(monte_carlo_steps=nsteps),
+        'Simulated Quantum Annealing QUBO': QSimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
+                                                                       n_trotters=10),
     }
 
     ising_solvers = {
-        'Simulated Annealing Ising': SimulatedAnnealingIsing(monte_carlo_steps=nsteps),
-        'Simulated Quantum Annealing Ising': SimulatedQuantumAnnealingIsing(monte_carlo_steps=nsteps,
-                                                                            n_trotters=10),
-        'Discrete Simulated Bifurcation Ising': DiscreteSimulatedBifurcationIsing(euler_steps=nsteps),
-        'Ballistic Simulated Bifurcation Ising': BallisticSimulatedBifurcationIsing(euler_steps=nsteps),
-        'Stochastic Simulated Annealing Ising': StochasticSimulatedAnnealingIsing(
+        'Simulated Annealing Ising': ISimulatedAnnealing(monte_carlo_steps=nsteps),
+        'Simulated Quantum Annealing Ising': ISimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
+                                                                        n_trotters=10),
+        'Discrete Simulated Bifurcation Ising': IDiscreteSimulatedBifurcation(euler_steps=nsteps),
+        'Ballistic Simulated Bifurcation Ising': IBallisticSimulatedBifurcation(euler_steps=nsteps),
+        'Stochastic Simulated Annealing Ising': IStochasticSimulatedAnnealing(
             monte_carlo_steps=nsteps,
             # temperature_scheduler=sch.WarmRestartScheduler(
             #     sch.DiscreteScheduler(
@@ -40,7 +40,7 @@ if __name__ == '__main__':
             #         n_plateau=6),
             #     n_restarts=150)
         ),
-        'Stochastic Simulated Quantum Annealing Ising': StochasticSimulatedQuantumAnnealingIsing(
+        'Stochastic Simulated Quantum Annealing Ising': IStochasticSimulatedQuantumAnnealing(
             monte_carlo_steps=nsteps, n_trotters=10,
         ),
     }
