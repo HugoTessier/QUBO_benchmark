@@ -5,7 +5,7 @@ import random
 import mpmath
 from typing import Tuple, Callable
 from abc import abstractmethod
-from utils.schedulers import Scheduler, LinearScheduler
+from utils.schedulers import Scheduler, LinearScheduler, HyperbolicScheduler
 from utils.sampling import range_sampler
 
 
@@ -18,8 +18,8 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
     def __init__(self,
                  monte_carlo_steps: int,
                  n_trotters: int,
-                 temperature_scheduler: Scheduler = LinearScheduler(start=4.0, end=1 / 32),
-                 transverse_field_scheduler: Scheduler = LinearScheduler(start=2.0, end=0.),
+                 temperature_scheduler: Scheduler = HyperbolicScheduler(start=1e9, end=8 / 7),
+                 transverse_field_scheduler: Scheduler = LinearScheduler(start=8.0, end=0.),
                  sampler: Callable = range_sampler):
         """
         :param monte_carlo_steps: Number of Monte-Carlo steps, i.e. the outermost loop of the algorithm.
@@ -42,8 +42,7 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
     def _compute_replicas_coupling_strength(self, temperature: float, transverse_field: float) -> float:
         # Weird formula to compute the coupling strength, that increases during training to force trotters to
         # become the same.
-        return (temperature / 2) * math.log(
-            mpmath.coth(transverse_field / (self.n_trotters * temperature)))
+        return (temperature / 2) * math.log(mpmath.coth(transverse_field / (self.n_trotters * temperature)))
 
     def _select_final_answer(self, x: np.ndarray, *args, **kwargs) -> np.ndarray:
         # Gives the trotter with the best energy. We do that, instead of giving an average, because, not only does
@@ -87,7 +86,7 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
                     # energy, then exp(-delta_energy / temperature) > 1 and the change is accepted; otherwise, we have
                     # exp(-delta_energy / temperature) in [0,1] too and then, the change is accepted in a probabilistic
                     # way, with decreasing chances as the energy increase becomes larger.
-                    if math.exp(-delta_energy / temperature) > random.random():
+                    if math.exp(min(-delta_energy / temperature, 1)) > random.random():  # min to avoid math range error
                         # We accept the change in the i,m element of x
                         self._flip_element(x, i, m)
                         local_energy = self._update_local_energy(local_energy, x, i, m, *args, **kwargs)
@@ -225,13 +224,15 @@ class SimulatedQuantumAnnealingQUBO(AlgorithmQUBO, SimulatedQuantumAnnealingComm
                                           i: int,
                                           m: int) -> float:
         # The coupling depends on the m-1 and m+1 trotters
+        # It is supposed to penalize when the current spin takes a value different from the others, which
+        # requires some modifications to work properly when using 0 or 1
         replica_coupling = 0
         if m + 1 != self.n_trotters:
-            replica_coupling += x[i, m + 1]
+            replica_coupling += x[i, m + 1] * 2 - 1  # Converts from {0,1} to {-1,1}
         if m != 0:
-            replica_coupling += x[i, m - 1]
-        flip_direction = 1 if x[i, m] == 0 else -1
-        return replicas_coupling_strength * flip_direction * replica_coupling
+            replica_coupling += x[i, m - 1] * 2 - 1  # Converts from {0,1} to {-1,1}
+        flip_direction = 2 if x[i, m] == 0 else -2  # 2 and not 1 to have the same magnitude as with Ising models
+        return - replicas_coupling_strength * flip_direction * replica_coupling
 
     def __call__(self, qubo: np.ndarray, offset: float) -> Tuple:
         """
@@ -252,7 +253,8 @@ class SimulatedQuantumAnnealingIsing(AlgorithmIsing, SimulatedQuantumAnnealingCo
                               linear: np.ndarray,
                               quadratic: np.ndarray,
                               offset: float) -> float:
-        return (-2 * x[i, m]) * (local_energy[i, m] - (2 * quadratic[i, i] * x[i, m]) + linear[i])
+        # No quadratic[i,i] term because in Ising model the diagonal is 0
+        return (-2 * x[i, m]) * (local_energy[i, m] + linear[i])
 
     @staticmethod
     def _update_local_energy(local_energy: np.ndarray,
@@ -286,7 +288,7 @@ class SimulatedQuantumAnnealingIsing(AlgorithmIsing, SimulatedQuantumAnnealingCo
         if m != 0:
             replica_coupling += x[i, m - 1]
         flip_direction = - 2 * x[i, m]
-        return replicas_coupling_strength * flip_direction * replica_coupling
+        return - replicas_coupling_strength * flip_direction * replica_coupling
 
     def __call__(self, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> Tuple:
         """

@@ -16,7 +16,7 @@ class SimulatedAnnealingCommon(Algorithm):
 
     def __init__(self,
                  monte_carlo_steps: int,
-                 temperature_scheduler: Scheduler = GeometricScheduler(start=20, decay_rate=0.9),
+                 temperature_scheduler: Scheduler = GeometricScheduler(start=20, multiplier=0.9),
                  sampler: Callable = range_sampler):
         """
         :param monte_carlo_steps: Number of Monte-Carlo steps, i.e. the outermost loop of the algorithm.
@@ -168,7 +168,8 @@ class SimulatedAnnealingIsing(AlgorithmIsing, SimulatedAnnealingCommon):
                               linear: np.ndarray,
                               quadratic: np.ndarray,
                               offset: float) -> np.ndarray:
-        return (-2 * x[i]) * (local_energy[i] - (2 * quadratic[i, i] * x[i]) + linear[i])
+        # No quadratic[i,i] term because in Ising model the diagonal is 0
+        return (-2 * x[i]) * (local_energy[i] + linear[i])
 
     @staticmethod
     def _initialize_local_energy(x: np.ndarray,

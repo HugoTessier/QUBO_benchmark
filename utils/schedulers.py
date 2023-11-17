@@ -36,16 +36,62 @@ class LinearScheduler(Scheduler):
         return self.start + ((self.end - self.start) * (i / n))
 
 
+class HyperbolicScheduler(Scheduler):
+    """Hyperbolic interpolation."""
+
+    def __init__(self, start: float, end: float):
+        """
+        :param start: Value at which the parameter starts.
+        :param end: Value at which the parameter ends.
+        """
+        self.start = 1 / start
+        self.end = 1 / end
+
+    def update(self, i: int, n: int) -> float:
+        return 1 / (self.start + ((self.end - self.start) * (i / n)))
+
+
 class GeometricScheduler(Scheduler):
     """Geometric evolution."""
 
-    def __init__(self, start: float, decay_rate: float):
+    def __init__(self, start: float, multiplier: float, max_value: float = None, min_value: float = None):
         """
         :param start: Value at which the parameter starts.
-        :param decay_rate: Proportion by which each previous value is decayed.
+        :param multiplier: Coefficient by which each previous value is multiplied.
+        :param max_value: Optional, provides a maximum value above which not to go.
+        :param min_value: Optional, provides a minimum value below which not to go.
         """
         self.start = start
-        self.decay_rate = decay_rate
+        self.multiplier = multiplier
+        self.max_value = max_value
+        self.min_value = min_value
 
     def update(self, i: int, n: int) -> float:
-        return self.start * math.pow(self.decay_rate, i)
+        value = self.start * math.pow(self.multiplier, i)
+        if self.min_value is not None:
+            value = max(self.min_value, value)
+        if self.max_value is not None:
+            value = min(self.max_value, value)
+        return value
+
+
+class DiscreteScheduler(Scheduler):
+    def __init__(self, scheduler: Scheduler, n_plateau: int):
+        self.scheduler = scheduler
+        self.n_plateau = n_plateau
+
+    def update(self, i: int, n: int) -> float:
+        if i >= (n // self.n_plateau) * self.n_plateau:
+            i = (n // self.n_plateau) * self.n_plateau - 1
+        return self.scheduler.update(i // (n // self.n_plateau), n // self.n_plateau)
+
+
+class WarmRestartScheduler(Scheduler):
+    def __init__(self, scheduler: Scheduler, n_restarts: int):
+        self.scheduler = scheduler
+        self.n_restarts = n_restarts
+
+    def update(self, i: int, n: int) -> float:
+        if i >= (n // self.n_restarts) * self.n_restarts:
+            i = (n // self.n_restarts) * self.n_restarts - 1
+        return self.scheduler.update(i % (n // self.n_restarts), n // self.n_restarts)
