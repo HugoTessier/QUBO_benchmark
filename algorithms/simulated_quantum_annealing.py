@@ -7,6 +7,7 @@ from typing import Tuple, Callable
 from abc import abstractmethod
 from utils.schedulers import Scheduler, LinearScheduler, HyperbolicScheduler
 from utils.sampling import range_sampler
+from utils.data_struct import *
 
 
 class SimulatedQuantumAnnealingCommon(Algorithm):
@@ -34,30 +35,60 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
         self.transverse_field_scheduler = transverse_field_scheduler
         self.sampler = sampler
 
-    def _select_best_energy_among_trotters(self, x: np.ndarray, *args, **kwargs) -> float:
+    def _select_best_energy_among_trotters(self, x: np.ndarray, problem: ProblemData) -> float:
         # Since each trotter is a candidate solution, we report the energy of the best one.
         # Indeed, at the end of the annealing, we return the trotter of least energy.
-        return min([self.compute_energy(solution, *args, **kwargs) for solution in x.T])
+        return min([self.compute_energy(solution, problem) for solution in x.T])
 
     def _compute_replicas_coupling_strength(self, temperature: float, transverse_field: float) -> float:
         # Weird formula to compute the coupling strength, that increases during training to force trotters to
         # become the same.
         return (temperature / 2) * math.log(mpmath.coth(transverse_field / (self.n_trotters * temperature)))
 
-    def _select_final_answer(self, x: np.ndarray, *args, **kwargs) -> np.ndarray:
+    def _select_final_answer(self, x: np.ndarray, problem: ProblemData) -> np.ndarray:
         # Gives the trotter with the best energy. We do that, instead of giving an average, because, not only does
         # it lead to non-acceptable values (e.g. zeros for Ising models), but also because the average of the solutions
         # is not guaranteed to give the average of their energies.
         energies = []
         for solution in x.T:
-            energies.append(self.compute_energy(solution, *args, **kwargs))
+            energies.append(self.compute_energy(solution, problem))
         return x.T[np.argmin(np.array(energies))]
 
-    def __call__(self, *args, **kwargs) -> Tuple:
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
+    @abstractmethod
+    def _compute_energy_delta(self, x: np.ndarray, local_energy: np.ndarray, i: int, m: int,
+                              problem: ProblemData) -> float:
+        raise NotImplementedError
 
-        length = self.get_length(*args, **kwargs)
+    @staticmethod
+    @abstractmethod
+    def _initialize_local_energy(x: np.ndarray, problem: ProblemData) -> np.ndarray:
+        raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def _update_local_energy(local_energy: np.ndarray, x: np.ndarray, i: int, m: int,
+                             problem: ProblemData) -> np.ndarray:
+        raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def _flip_element(x: np.ndarray, i: int, m: int) -> np.ndarray:
+        raise NotImplementedError
+
+    @abstractmethod
+    def _compute_replica_coupling_penalty(self, x: np.ndarray, replicas_coupling_strength: float, i: int,
+                                          m: int) -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    @abstractmethod
+    def _preprocess_problem(problem: ProblemData) -> ProblemData:
+        raise NotImplementedError
+
+    def __call__(self, problem: ProblemData) -> Tuple:
+        problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
+
+        length = self.get_length(problem)
 
         # SQA is based on the principle of running n_trotter copies in parallel, that each try to solve the problem
         # and which are progressively applied a penalty to force them to converge toward a common solution at the end.
@@ -66,11 +97,11 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
 
         # Computation trick: it is possible to compute the delta_energy more simply by computing first a "local energy"
         # that is only updated if the change is accepted.
-        local_energy = self._initialize_local_energy(x, *args, **kwargs)
+        local_energy = self._initialize_local_energy(x, problem)
 
         history = []  # We monitor the energy evolution at each Monte-Carlo step
         for t in range(self.monte_carlo_steps):
-            history.append([t, self._select_best_energy_among_trotters(x, *args, **kwargs)])
+            history.append([t, self._select_best_energy_among_trotters(x, problem)])
             temperature = self.temperature_scheduler.update(t, self.monte_carlo_steps)
             transverse_field = self.transverse_field_scheduler.update(t, self.monte_carlo_steps)
             replicas_coupling_strength = self._compute_replicas_coupling_strength(temperature, transverse_field)
@@ -79,7 +110,7 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
                 for m in self.sampler(self.n_trotters):
                     replica_coupling_penalty = self._compute_replica_coupling_penalty(x, replicas_coupling_strength,
                                                                                       i, m)
-                    delta_energy = self._compute_energy_delta(x, local_energy, i, m, *args, **kwargs)
+                    delta_energy = self._compute_energy_delta(x, local_energy, i, m, problem)
                     delta_energy = delta_energy + replica_coupling_penalty
 
                     # Metropolis algorithm: the random number is in [0,1]; if the tested change in x reduces the
@@ -89,97 +120,11 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
                     if math.exp(min(-delta_energy / temperature, 1)) > random.random():  # min to avoid math range error
                         # We accept the change in the i,m element of x
                         self._flip_element(x, i, m)
-                        local_energy = self._update_local_energy(local_energy, x, i, m, *args, **kwargs)
+                        local_energy = self._update_local_energy(local_energy, x, i, m, problem)
 
-        x = self._select_final_answer(x, *args, **kwargs)
-        history.append([self.monte_carlo_steps, self.compute_energy(x, *args, **kwargs)])
+        x = self._select_final_answer(x, problem)
+        history.append([self.monte_carlo_steps, self.compute_energy(x, problem)])
         return x, history
-
-    @abstractmethod
-    def _compute_energy_delta(self,
-                              x: np.ndarray,
-                              local_energy: np.ndarray,
-                              i: int,
-                              m: int,
-                              *args, **kwargs) -> float:
-        """
-        Gives the variation in energy when changing the [i,m] element of x.
-
-        :param x: The candidate solution whose variations in energy we want to measure when changing the [i,m] element.
-        :param local_energy: Energy associated to each element of x, in order to simplify calculations.
-        :param i: Element i of any trotter of x.
-        :param m: Trotter m of x.
-
-        :return: The variation of energy when changing the [i,m] element of x.
-        """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def _initialize_local_energy(x: np.ndarray, *args, **kwargs) -> np.ndarray:
-        """
-        Initializes the local energy field of x.
-        :param x: The solution whose energy field to compute.
-        :return: The local energy field.
-        """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def _update_local_energy(local_energy: np.ndarray,
-                             x: np.ndarray,
-                             i: int,
-                             m: int,
-                             *args,
-                             **kwargs) -> np.ndarray:
-        """
-        Updates the local energy field.
-
-        :param local_energy: The energy field to update.
-        :param x: The candidate solution that has changed and whose energy field we must update.
-        :param i: Element i of any trotter of x.
-        :param m: Trotter m of x.
-
-        :return: The updated local energy field.
-        """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def _flip_element(x: np.ndarray, i: int, m: int) -> np.ndarray:
-        """
-        Flips the [i,m] of x.
-
-        :param x: The candidate solution whose element [i,m] is to flip.
-        :param i: Element i of any trotter of x.
-        :param m: Trotter m of x.
-
-        :return: The modified x.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def _compute_replica_coupling_penalty(self,
-                                          x: np.ndarray,
-                                          replicas_coupling_strength: float,
-                                          i: int,
-                                          m: int) -> float:
-        """
-        Computes the penalty that enforces the trotters to converge toward a common solution.
-
-        :param x: The ensemble of trotters.
-        :param replicas_coupling_strength: A coefficient.
-        :param i: Index of the element in each trotter.
-        :param m: Index of the trotter.
-        :return: The computed penalty.
-        """
-        raise NotImplementedError
 
 
 class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
@@ -188,25 +133,15 @@ class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
     We adapted some calculations to fit QUBO solutions in {0, 1} instead of {-1, 1}.
     """
 
-    def _compute_energy_delta(self,
-                              x: np.ndarray,
-                              local_energy: np.ndarray,
-                              i: int,
-                              m: int,
-                              qubo: np.ndarray,
-                              offset: float) -> float:
+    def _compute_energy_delta(self, x: np.ndarray, local_energy: np.ndarray, i: int, m: int,
+                              problem: QUBOData) -> float:
         flip_direction = 1 if x[i, m] == 0 else -1  # x_after - x_before
-        return flip_direction * (local_energy[i, m] + (qubo[i, i] * (1 - (2 * x[i, m]))))
+        return flip_direction * (local_energy[i, m] + (problem.Q[i, i] * (1 - (2 * x[i, m]))))
 
     @staticmethod
-    def _update_local_energy(local_energy: np.ndarray,
-                             x: np.ndarray,
-                             i: int,
-                             m: int,
-                             qubo: np.ndarray,
-                             offset: float) -> np.ndarray:
+    def _update_local_energy(local_energy: np.ndarray, x: np.ndarray, i: int, m: int, problem: QUBOData) -> np.ndarray:
         flip_direction = -1 if x[i, m] == 0 else 1
-        local_energy[:, m] += flip_direction * (qubo[:, i] + qubo[i, :])
+        local_energy[:, m] += flip_direction * problem.extra['symmetric_Q'][:, i]
         return local_energy
 
     @staticmethod
@@ -215,8 +150,8 @@ class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
         return x
 
     @staticmethod
-    def _initialize_local_energy(x: np.ndarray, qubo: np.ndarray, offset: float) -> np.ndarray:
-        return np.dot(qubo, x) + np.dot(qubo.T, x)
+    def _initialize_local_energy(x: np.ndarray, problem: QUBOData) -> np.ndarray:
+        return np.dot(problem.extra['symmetric_Q'], x)
 
     def _compute_replica_coupling_penalty(self,
                                           x: np.ndarray,
@@ -234,37 +169,26 @@ class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
         flip_direction = 2 if x[i, m] == 0 else -2  # 2 and not 1 to have the same magnitude as with Ising models
         return - replicas_coupling_strength * flip_direction * replica_coupling
 
-    def __call__(self, qubo: np.ndarray, offset: float) -> Tuple:
-        """
-        :param qubo: Coupling coefficients of the QUBO problem.*
-        :param offset: Energy offset of the QUBO problem.
-        """
-        return super().__call__(qubo, offset)
+    @staticmethod
+    def _preprocess_problem(problem: QUBOData) -> QUBOData:
+        problem.extra = {"symmetric_Q": problem.Q + problem.Q.T}
+        return problem
+
+    def __call__(self, problem: QUBOData) -> Tuple:
+        return super().__call__(problem)
 
 
 class ISimulatedQuantumAnnealing(IAlgorithm, SimulatedQuantumAnnealingCommon):
     """Ising model version of SQA."""
 
-    def _compute_energy_delta(self,
-                              x: np.ndarray,
-                              local_energy: np.ndarray,
-                              i: int,
-                              m: int,
-                              linear: np.ndarray,
-                              quadratic: np.ndarray,
-                              offset: float) -> float:
+    def _compute_energy_delta(self, x: np.ndarray, local_energy: np.ndarray, i: int, m: int,
+                              problem: IsingData) -> float:
         # No quadratic[i,i] term because in Ising model the diagonal is 0
-        return (-2 * x[i, m]) * (local_energy[i, m] + linear[i])
+        return (-2 * x[i, m]) * (local_energy[i, m] + problem.h[i])
 
     @staticmethod
-    def _update_local_energy(local_energy: np.ndarray,
-                             x: np.ndarray,
-                             i: int,
-                             m: int,
-                             linear: np.ndarray,
-                             quadratic: np.ndarray,
-                             offset: float) -> np.ndarray:
-        local_energy[:, m] += 2 * x[i, m] * (quadratic[:, i] + quadratic[i, :])
+    def _update_local_energy(local_energy: np.ndarray, x: np.ndarray, i: int, m: int, problem: IsingData) -> np.ndarray:
+        local_energy[:, m] += 2 * x[i, m] * problem.extra['symmetric_J'][:, i]
         return local_energy
 
     @staticmethod
@@ -273,8 +197,8 @@ class ISimulatedQuantumAnnealing(IAlgorithm, SimulatedQuantumAnnealingCommon):
         return x
 
     @staticmethod
-    def _initialize_local_energy(x, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> np.ndarray:
-        return np.dot(quadratic, x) + np.dot(quadratic.T, x)
+    def _initialize_local_energy(x, problem: IsingData) -> np.ndarray:
+        return np.dot(problem.extra['symmetric_J'], x)
 
     def _compute_replica_coupling_penalty(self,
                                           x: np.ndarray,
@@ -290,10 +214,10 @@ class ISimulatedQuantumAnnealing(IAlgorithm, SimulatedQuantumAnnealingCommon):
         flip_direction = - 2 * x[i, m]
         return - replicas_coupling_strength * flip_direction * replica_coupling
 
-    def __call__(self, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> Tuple:
-        """
-        :param linear: Local magnetic field of the Ising model.
-        :param quadratic: Coupling coefficients of the Ising model.
-        :param offset: Energy offset of the QUBO problem.
-        """
-        return super().__call__(linear, quadratic, offset)
+    @staticmethod
+    def _preprocess_problem(problem: IsingData) -> IsingData:
+        problem.extra = {"symmetric_J": problem.J + problem.J.T}
+        return problem
+
+    def __call__(self, problem: IsingData) -> Tuple:
+        return super().__call__(problem)

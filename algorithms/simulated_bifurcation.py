@@ -4,6 +4,7 @@ from typing import Tuple
 import math
 from abc import abstractmethod
 from utils.schedulers import Scheduler, LinearScheduler
+from utils.data_struct import *
 
 
 class ISimulatedBifurcation(IAlgorithm):
@@ -36,25 +37,14 @@ class ISimulatedBifurcation(IAlgorithm):
         return self.a0 * momenta * self.delta_t
 
     @abstractmethod
-    def _compute_momenta_variation(self,
-                                   x: np.ndarray,
-                                   a: float,
-                                   c0: float,
-                                   linear: np.ndarray,
-                                   quadratic: np.ndarray,
-                                   offset: float) -> np.ndarray:
-        """
-        :param linear: Local magnetic field of the Ising model.
-        :param quadratic: Coupling coefficients of the Ising model.
-        :param offset: Energy offset of the QUBO problem.
-        """
+    def _compute_momenta_variation(self, x: np.ndarray, a: float, c0: float, problem) -> np.ndarray:
         raise NotImplementedError
 
     @staticmethod
-    def _compute_c0(linear: np.ndarray, quadratic: np.ndarray, offset: float) -> float:
+    def _compute_c0(problem) -> float:
         # It is unclear in the paper how we should generalize this initialization when there is a linear term.
-        n = quadratic.shape[0]
-        return 0.5 / (math.sqrt((quadratic ** 2).sum() / (n * (n - 1))) * math.sqrt(n))
+        n = problem.extra['symmetric_J'].shape[0]
+        return 0.5 / (math.sqrt((problem.extra['symmetric_J'] ** 2).sum() / (n * (n - 1))) * math.sqrt(n))
 
     @staticmethod
     def _binarize(x: np.ndarray) -> np.ndarray:
@@ -69,56 +59,47 @@ class ISimulatedBifurcation(IAlgorithm):
     def initialize_vector(self, length: int) -> np.ndarray:
         return (np.random.random(length) - 0.5) * self.initialization_range
 
-    def __call__(self, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> Tuple:
-        """
-        :param linear: Local magnetic field of the Ising model.
-        :param quadratic: Coupling coefficients of the Ising model.
-        :param offset: Energy offset of the QUBO problem.
-        """
-        quad = -2 * (quadratic + quadratic.T)
-        length = self.get_length(linear, quadratic, offset)
-        c0 = self._compute_c0(linear, quad, offset)
+    @staticmethod
+    def _preprocess_problem(problem: IsingData) -> IsingData:
+        problem.extra = {"symmetric_J": -2 * (problem.J + problem.J.T)}
+        return problem
+
+    def __call__(self, problem: IsingData) -> Tuple:
+        problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
+
+        length = self.get_length(problem)
+        c0 = self._compute_c0(problem)
 
         x = self.initialize_vector(length)  # Positions of the element of the solution.
         momenta = self.initialize_vector(length)  # Momentum of each element of x within the search space.
 
         history = []  # We monitor the energy evolution at each Euler step
         for t in range(self.euler_steps):
-            history.append([t, self.compute_energy(self._binarize(x), linear, quadratic, offset)])
+            history.append([t, self.compute_energy(self._binarize(x), problem)])
 
             a = self.a_scheduler.update(t, self.euler_steps)
 
             # Euler's method: solving differential equations iteratively.
-            momenta += self._compute_momenta_variation(x, a, c0, linear, quad, offset)
+            momenta += self._compute_momenta_variation(x, a, c0, problem)
             x += self._compute_position_variation(momenta)
             x, momenta = self._clip(x, momenta)  # "Inelastic walls" to reduce the "analog errors"
 
         x = self._binarize(x)  # We turn the real-values into a valid combinatorial solution.
-        history.append([self.euler_steps, self.compute_energy(x, linear, quadratic, offset)])
+        history.append([self.euler_steps, self.compute_energy(x, problem)])
         return x, history
 
 
 class IDiscreteSimulatedBifurcation(ISimulatedBifurcation):
     """Ising model version of DSB."""
 
-    def _compute_momenta_variation(self,
-                                   x: np.ndarray,
-                                   a: float,
-                                   c0: float,
-                                   linear: np.ndarray,
-                                   quadratic: np.ndarray,
-                                   offset: float) -> np.ndarray:
-        return self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * self._binarize(x)).sum(axis=1) + linear)))
+    def _compute_momenta_variation(self, x: np.ndarray, a: float, c0: float, problem: IsingData) -> np.ndarray:
+        return self.delta_t * (-((self.a0 - a) * x) + (
+                c0 * ((problem.extra['symmetric_J'] * self._binarize(x)).sum(axis=1) + problem.h)))
 
 
 class IBallisticSimulatedBifurcation(ISimulatedBifurcation):
     """Ising model version of BSB."""
 
-    def _compute_momenta_variation(self,
-                                   x: np.ndarray,
-                                   a: float,
-                                   c0: float,
-                                   linear: np.ndarray,
-                                   quadratic: np.ndarray,
-                                   offset: float) -> np.ndarray:
-        return self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * x).sum(axis=1) + linear)))
+    def _compute_momenta_variation(self, x: np.ndarray, a: float, c0: float, problem: IsingData) -> np.ndarray:
+        return self.delta_t * (
+                -((self.a0 - a) * x) + (c0 * ((problem.extra['symmetric_J'] * x).sum(axis=1) + problem.h)))

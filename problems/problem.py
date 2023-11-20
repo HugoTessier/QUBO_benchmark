@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Tuple
+from utils.data_struct import *
 import numpy as np
 
 
@@ -9,24 +9,24 @@ class Problem(ABC):
     """
 
     @abstractmethod
-    def qubo(self, seed: int = 0) -> Tuple[np.ndarray, float]:
+    def qubo(self, seed: int = 0) -> QUBOData:
         """
         Generate an instance of the problem, depending on a seed, and returns its corresponding QUBO.
 
         :param seed: Seed to generate the problem.
-        :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a tuple
-        containing the Q matrix as a numpy array and the energy offset as a float.
+        :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a QUBOData
+        object containing the 'Q' matrix as a numpy array and the energy 'offset' as a float.
         """
         raise NotImplementedError
 
     @abstractmethod
-    def ising(self, seed: int = 0) -> Tuple[np.ndarray, np.ndarray, float]:
+    def ising(self, seed: int = 0) -> IsingData:
         """
         Generate an instance of the problem, depending on a seed, and returns its corresponding Ising model.
 
         :param seed: Seed to generate the problem.
-        :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of a tuple
-        containing the h and J matrices as numpy arrays and the energy offset as a float.
+        :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of a
+        IsingData object containing the 'h' and 'J' matrices as numpy arrays and the energy 'offset' as a float.
         """
         raise NotImplementedError
 

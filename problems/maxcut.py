@@ -4,8 +4,8 @@ from itertools import combinations, groupby
 import random
 import pyqubo
 import numpy as np
-from typing import Tuple
 import matplotlib.pyplot as plt
+from utils.data_struct import *
 
 
 def gnp_random_connected_graph(n: int, p: float) -> nx.Graph:
@@ -44,10 +44,8 @@ class MaxCut(Problem):
 
     def __init__(self, n_nodes: int, edge_prob: float):
         """
-        Prepares a generator of MaxCut problems.
-
-        :param n_nodes:
-        :param edge_prob:
+        :param n_nodes: Number of nodes in the graph.
+        :param edge_prob: Probability of each node to make a connection with each other node.
         """
         self.n_nodes = n_nodes
         self.edge_prob = edge_prob
@@ -68,12 +66,12 @@ class MaxCut(Problem):
         model = hamiltonian.compile()
         return model
 
-    def qubo(self, seed: int = 0) -> Tuple[np.ndarray, float]:
+    def qubo(self, seed: int = 0) -> QUBOData:
         """
         Generate an instance of the MaxCut problem, depending on a seed, and returns its corresponding QUBO.
 
         :param seed: Seed to generate the problem.
-        :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a tuple
+        :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a QUBOData object
         containing the Q matrix as a numpy array and the energy offset as a float.
         """
         model = self._create_model(seed)
@@ -81,15 +79,15 @@ class MaxCut(Problem):
         qubo_array = np.zeros((self.n_nodes, self.n_nodes))
         for k, v in qubo.items():
             qubo_array[int(k[0]), int(k[1])] = v
-        return qubo_array, offset
+        return QUBOData(Q=qubo_array, offset=offset)
 
-    def ising(self, seed: int = 0) -> Tuple[np.ndarray, np.ndarray, float]:
+    def ising(self, seed: int = 0) -> IsingData:
         """
         Generate an instance of the MaxCut problem, depending on a seed, and returns its corresponding Ising model.
 
         :param seed: Seed to generate the problem.
-        :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of a tuple
-        containing the h and J matrices as numpy arrays and the energy offset as a float.
+        :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of an
+        IsingData object containing the h and J matrices as numpy arrays and the energy offset as a float.
         """
         model = self._create_model(seed)
         linear, quadratic, offset = model.to_ising()
@@ -97,7 +95,7 @@ class MaxCut(Problem):
         for k, v in quadratic.items():
             quadratic_array[int(k[0]), int(k[1])] = v
         linear = np.zeros(self.n_nodes)  # Linear part in MaxCut is zero
-        return linear, quadratic_array, offset
+        return IsingData(h=linear, J=quadratic_array, offset=offset)
 
     def visualize(self, seed: int, x: np.ndarray) -> None:
         """

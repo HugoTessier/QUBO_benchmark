@@ -3,6 +3,7 @@ from typing import Tuple
 import numpy as np
 from problems.problem import Problem
 import pyqubo
+from utils.data_struct import *
 
 
 class MaxCutGSET(Problem):
@@ -45,7 +46,7 @@ class MaxCutGSET(Problem):
         self.path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'gset')
         self.gset_content = self._parse_gset_content()
 
-    def _create_model(self, index: int) -> pyqubo.Model:
+    def _create_model(self, index: int) -> Tuple[pyqubo.Model, int]:
         if index >= len(self.gset_content) or index < 0:
             raise IndexError
 
@@ -64,12 +65,12 @@ class MaxCutGSET(Problem):
         model = hamiltonian.compile()
         return model, n_nodes
 
-    def qubo(self, seed: int = 0) -> Tuple[np.ndarray, float]:
+    def qubo(self, seed: int = 0) -> QUBOData:
         """
         Generate an instance from the GSET MaxCut problem list, and returns its corresponding QUBO.
 
         :param seed: Index of the problem in the list of all GSET problems.
-        :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a tuple
+        :return: Instance of the problem as a QUBO, corresponding to the given seed, under the form of a QUBOData object
         containing the Q matrix as a numpy array and the energy offset as a float.
         """
         model, n_nodes = self._create_model(seed)
@@ -80,15 +81,15 @@ class MaxCutGSET(Problem):
             n1 = min(int(k[0]), int(k[1]))
             n2 = max(int(k[0]), int(k[1]))
             qubo_array[n1, n2] = v
-        return qubo_array, offset
+        return QUBOData(Q=qubo_array, offset=offset)
 
-    def ising(self, seed: int = 0) -> Tuple[np.ndarray, np.ndarray, float]:
+    def ising(self, seed: int = 0) -> IsingData:
         """
         Generate an instance from the GSET MaxCut problem list, and returns its corresponding Ising model.
 
         :param seed: Index of the problem in the list of all GSET problems.
-        :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of a tuple
-        containing the h and J matrices as numpy arrays and the energy offset as a float.
+        :return: Instance of the problem as an Ising model, corresponding to the given seed, under the form of an
+        IsingData object containing the h and J matrices as numpy arrays and the energy offset as a float.
         """
         model, n_nodes = self._create_model(seed)
         linear, quadratic, offset = model.to_ising()
@@ -99,7 +100,7 @@ class MaxCutGSET(Problem):
             n2 = max(int(k[0]), int(k[1]))
             quadratic_array[n1, n2] = v
         linear = np.zeros(n_nodes)  # Linear part in MaxCut is zero
-        return linear, quadratic_array, offset
+        return IsingData(h=linear, J=quadratic_array, offset=offset)
 
     def visualize(self, seed: int, x: np.ndarray) -> None:
         raise NotImplementedError

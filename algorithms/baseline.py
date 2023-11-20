@@ -1,37 +1,35 @@
 from algorithms.algorithm import QAlgorithm, IAlgorithm
 import numpy as np
+from utils.data_struct import *
 
 
-def qubo_baseline(n_trials: int, qubo: np.ndarray, offset: float) -> float:
+def qubo_baseline(n_trials: int, problem: QUBOData) -> float:
     """
     Computes a baseline energy using only random solutions, for a QUBO problem.
 
     :param n_trials: Number of tested random solutions, whose energy to average.
-    :param qubo: Coupling coefficients of the QUBO problem.
-    :param offset: Energy offset of the QUBO problem.
+    :param problem: Object containing the data of the QUBO model.
     :return: The average energy.
     """
     energies = []
-    length = QAlgorithm.get_length(qubo, offset)
+    length = QAlgorithm.get_length(problem)
     for _ in range(n_trials):
         x = QAlgorithm.generate_random_solution(length)
-        energies.append(QAlgorithm.compute_energy(x, qubo, offset))
+        energies.append(QAlgorithm.compute_energy(x, problem))
     return np.mean(np.array(energies))
 
 
-def ising_baseline(n_trials: int, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> float:
+def ising_baseline(n_trials: int, problem: IsingData) -> float:
     """
     Computes a baseline energy using only random solutions, for an Ising model.
 
     :param n_trials: Number of tested random solutions, whose energy to average.
-    :param linear: Local magnetic field of the ising model.
-    :param quadratic: Coupling coefficients of the Ising model.
-    :param offset: Energy offset of the Ising model.
+    :param problem: Object containing the data of the Ising model.
     :return: The average energy.
     """
     energies = []
-    length = IAlgorithm.get_length(linear, quadratic, offset)
+    length = IAlgorithm.get_length(problem)
     for _ in range(n_trials):
         x = IAlgorithm.generate_random_solution(length)
-        energies.append(IAlgorithm.compute_energy(x, linear, quadratic, offset))
+        energies.append(IAlgorithm.compute_energy(x, problem))
     return np.mean(np.array(energies))

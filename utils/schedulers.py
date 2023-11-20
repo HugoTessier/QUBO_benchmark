@@ -76,7 +76,13 @@ class GeometricScheduler(Scheduler):
 
 
 class DiscreteScheduler(Scheduler):
+    """Discretizes a given scheduling."""
+
     def __init__(self, scheduler: Scheduler, n_plateau: int):
+        """
+        :param scheduler: The scheduler to discretize.
+        :param n_plateau: The number of discrete plateaus of the discretized scheduling.
+        """
         self.scheduler = scheduler
         self.n_plateau = n_plateau
 
@@ -87,7 +93,13 @@ class DiscreteScheduler(Scheduler):
 
 
 class WarmRestartScheduler(Scheduler):
+    """Repeats a given scheduling."""
+
     def __init__(self, scheduler: Scheduler, n_restarts: int):
+        """
+        :param scheduler: The scheduler to repeat.
+        :param n_restarts: The number of repetitions of the scheduling.
+        """
         self.scheduler = scheduler
         self.n_restarts = n_restarts
 

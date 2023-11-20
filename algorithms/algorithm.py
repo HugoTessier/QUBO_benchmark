@@ -1,57 +1,52 @@
 from abc import ABC, abstractmethod
 import numpy as np
 from typing import Tuple
+from utils.data_struct import *
 
 
 class Algorithm(ABC):
-    """
-    Any algorithm that is able to solve a combinatorial optimization problem.
-    """
+    """Any algorithm that is able to solve a combinatorial optimization problem."""
 
     @staticmethod
     @abstractmethod
-    def generate_random_solution(length: int) -> np.ndarray:
+    def generate_random_solution(*args: int) -> np.ndarray:
         """
         Generates a random solution, for a CO problem, of given length.
 
-        :param length: Length of the vector to generate.
+        :param args: Dimensions of the vector to generate.
         :return: The generated vector.
         """
         raise NotImplementedError
 
     @staticmethod
     @abstractmethod
-    def compute_energy(x, *args, **kwargs) -> float:
+    def compute_energy(x, problem: ProblemData) -> float:
         """
         Computes the Hamiltonian energy of the CO problem.
 
         :param x: The solution whose energy to evaluate.
+        :param problem: Object containing the data of the problem to solve.
         :return: The evaluated Hamiltonian energy.
         """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
 
     @staticmethod
     @abstractmethod
-    def get_length(*args, **kwargs) -> int:
+    def get_length(problem: ProblemData) -> int:
         """
         Gets the length of the solution to provide to the CO problem.
+        :param problem: Object containing the data of the problem to solve.
         :return: The length.
         """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
 
     @abstractmethod
-    def __call__(self, *args, **kwargs) -> Tuple:
+    def __call__(self, problem: ProblemData) -> Tuple:
         """
         Solves a CO problem using a given algorithm.
-
+        :param problem: Object containing the data of the problem to solve.
         :return: The solution and a history of the optimization process.
         """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
 
 
@@ -61,87 +56,37 @@ class QAlgorithm(Algorithm):
     """
 
     @staticmethod
-    def generate_random_solution(length: int) -> np.ndarray:
-        """
-        Generates a random vector of bits in {0,1} of a given length.
-
-        :param length: Length of the vector to generate.
-        :return: The generated vector.
-        """
-        x = np.zeros(length)
-        x[np.random.choice(length, length // 2, replace=False)] = 1.0
-        return x
+    def generate_random_solution(*args: int) -> np.ndarray:
+        return np.random.randint(size=args, low=0, high=2)
 
     @staticmethod
-    def compute_energy(x: np.ndarray, qubo: np.ndarray, offset: float) -> float:
-        """
-        Computes the Hamiltonian energy of the QUBO problem.
-
-        :param x: The solution whose energy to evaluate.
-        :param qubo: The matrix of the coupling coefficients of the QUBO problem.
-        :param offset: Offset value of the energy.
-        :return: The evaluated Hamiltonian energy.
-        """
-        return np.dot(x.T, np.dot(qubo, x)) + offset
+    def compute_energy(x: np.ndarray, problem: QUBOData) -> float:
+        return np.dot(x.T, np.dot(problem.Q, x)) + problem.offset
 
     @staticmethod
-    def get_length(qubo: np.ndarray, offset: float) -> int:
-        return qubo.shape[0]
+    def get_length(problem: QUBOData) -> int:
+        return problem.Q.shape[0]
 
     @abstractmethod
-    def __call__(self, qubo: np.ndarray, offset: float) -> Tuple:
-        """
-        Solves a QUBO problem using a given algorithm.
-
-        :param qubo: The matrix of the coupling coefficients of the QUBO problem.
-        :param offset: Offset value of the energy.
-        :return: The solution and a history of the optimization process.
-        """
-        return super().__call__(qubo, offset)
+    def __call__(self, problem: QUBOData) -> Tuple:
+        return super().__call__(problem)
 
 
 class IAlgorithm(Algorithm):
-    """
-    Any algorithm that is able to solve an Ising problem.
-    """
+    """Any algorithm that is able to solve an Ising problem."""
 
     @staticmethod
-    def generate_random_solution(length: int) -> np.ndarray:
-        """
-        Generates a random vector of bits in {-1,1} of a given length.
-
-        :param length: Length of the vector to generate.
-        :return: The generated vector.
-        """
-        x = np.ones(length)
-        x[np.random.choice(length, length // 2, replace=False)] = -1.0
-        return x
+    def generate_random_solution(*args) -> np.ndarray:
+        return np.random.randint(size=args, low=0, high=2) * 2 - 1
 
     @staticmethod
-    def compute_energy(x: np.ndarray, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> float:
-        """
-        Computes the Hamiltonian energy of the Ising problem.
-
-        :param x: The solution whose energy to evaluate.
-        :param linear: The vector of the local magnetic field coefficients of the Ising problem.
-        :param quadratic: The matrix of the coupling coefficients of the Ising problem.
-        :param offset: Offset value of the energy.
-        :return: The evaluated Hamiltonian energy.
-        """
-        return np.dot(linear, x) + np.dot(x.T, np.dot(quadratic, x)) + offset
+    def compute_energy(x: np.ndarray, problem: IsingData) -> float:
+        return np.dot(problem.h, x) + np.dot(x.T, np.dot(problem.J, x)) + problem.offset
 
     @staticmethod
-    def get_length(linear: np.ndarray, quadratic: np.ndarray, offset: float) -> int:
-        return quadratic.shape[0]
+    def get_length(problem: IsingData) -> int:
+        return problem.J.shape[0]
 
     @abstractmethod
-    def __call__(self, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> Tuple:
-        """
-        Solves a QUBO problem using a given algorithm.
-
-        :param linear: The vector of the local magnetic field coefficients of the Ising problem.
-        :param quadratic: The matrix of the coupling coefficients of the Ising problem.
-        :param offset: Offset value of the energy.
-        :return: The solution and a history of the optimization process.
-        """
-        return super().__call__(linear, quadratic, offset)
+    def __call__(self, problem: IsingData) -> Tuple:
+        return super().__call__(problem)

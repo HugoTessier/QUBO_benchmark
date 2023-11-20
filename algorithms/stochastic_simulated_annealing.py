@@ -2,6 +2,7 @@ from algorithms.algorithm import IAlgorithm
 import numpy as np
 from typing import Tuple
 from utils.schedulers import Scheduler, GeometricScheduler
+from utils.data_struct import *
 
 
 class IStochasticSimulatedAnnealing(IAlgorithm):
@@ -30,28 +31,28 @@ class IStochasticSimulatedAnnealing(IAlgorithm):
         self.noise_magnitude = noise_magnitude
         self.alpha = alpha
 
-    def __call__(self, linear, quadratic, offset) -> Tuple:
-        """
-        :param linear: Local magnetic field of the Ising model.
-        :param quadratic: Coupling coefficients of the Ising model.
-        :param offset: Energy offset of the QUBO problem.
-        """
-        quad = -2 * (quadratic + quadratic.T)  # Algorithm originally designed for symmetric Ising models
-        length = self.get_length(linear, quadratic, offset)
+    @staticmethod
+    def _preprocess_problem(problem: IsingData) -> IsingData:
+        problem.extra = {"symmetric_J": -2 * (problem.J + problem.J.T)}
+        return problem
+
+    def __call__(self, problem: IsingData) -> Tuple:
+        problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
+        length = self.get_length(problem)
 
         # Same initialization as the original implementation
         x = self.generate_random_solution(length)
-        signal = np.copy(linear)
+        signal = np.copy(problem.h)
 
         history = []
         for step in range(self.monte_carlo_steps):
-            history.append([step, self.compute_energy(x, linear, quadratic, offset)])
+            history.append([step, self.compute_energy(x, problem)])
 
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
 
             # Stochastic integral computing
             noise = self.noise_magnitude * (np.random.randint(size=signal.shape, low=0, high=2) * 2 - 1)
-            signal += noise + np.dot(quad, x) - linear
+            signal += noise + np.dot(problem.extra['symmetric_J'], x) - problem.h
 
             # Approximation of the tanh
             signal[signal >= temperature] = temperature - self.alpha
@@ -60,5 +61,5 @@ class IStochasticSimulatedAnnealing(IAlgorithm):
             # Sign function without 0
             x = (signal >= 0.) * 2. - 1.
 
-        history.append([self.monte_carlo_steps, self.compute_energy(x, linear, quadratic, offset)])
+        history.append([self.monte_carlo_steps, self.compute_energy(x, problem)])
         return x, history

@@ -1,9 +1,8 @@
-from algorithms.algorithm import QAlgorithm, IAlgorithm, Algorithm
+from algorithms.algorithm import IAlgorithm
 import numpy as np
-from abc import abstractmethod
-from typing import Tuple, Callable
+from typing import Tuple
 from utils.schedulers import Scheduler, GeometricScheduler, LinearScheduler
-from utils.sampling import range_sampler
+from utils.data_struct import *
 
 
 class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
@@ -41,32 +40,32 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
         self.alpha = alpha
         self.delay_cycle = delay_cycle
 
-    def _select_best_energy_among_trotters(self, x: np.ndarray, *args, **kwargs) -> float:
+    def _select_best_energy_among_trotters(self, x: np.ndarray, problem: IsingData) -> float:
         # Since each trotter is a candidate solution, we report the energy of the best one.
         # Indeed, at the end of the annealing, we return the trotter of least energy.
-        return min([self.compute_energy(solution, *args, **kwargs) for solution in x.T])
+        return min([self.compute_energy(solution, problem) for solution in x.T])
 
-    def _select_final_answer(self, x: np.ndarray, *args, **kwargs) -> np.ndarray:
+    def _select_final_answer(self, x: np.ndarray, problem: IsingData) -> np.ndarray:
         # Gives the trotter with the best energy. We do that, instead of giving an average, because, not only does
         # it lead to non-acceptable values (e.g. zeros for Ising models), but also because the average of the solutions
         # is not guaranteed to give the average of their energies.
         energies = []
         for solution in x.T:
-            energies.append(self.compute_energy(solution, *args, **kwargs))
+            energies.append(self.compute_energy(solution, problem))
         return x.T[np.argmin(np.array(energies))]
 
     @staticmethod
     def _compute_coupling(previous_x, coupling_strength):
         return coupling_strength * np.hstack([previous_x[:, 1:], np.zeros((previous_x.shape[0], 1))])
 
-    def __call__(self, linear, quadratic, offset) -> Tuple:
-        """
-        :param linear: Local magnetic field of the Ising model.
-        :param quadratic: Coupling coefficients of the Ising model.
-        :param offset: Energy offset of the QUBO problem.
-        """
-        quad = -2 * (quadratic + quadratic.T)  # Algorithm originally designed for symmetric Ising models
-        length = self.get_length(linear, quadratic, offset)
+    @staticmethod
+    def _preprocess_problem(problem: IsingData) -> IsingData:
+        problem.extra = {"symmetric_J": -2 * (problem.J + problem.J.T)}
+        return problem
+
+    def __call__(self, problem: IsingData) -> Tuple:
+        problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
+        length = self.get_length(problem)
 
         x = np.stack([self.generate_random_solution(length) for _ in range(self.n_trotters)]).T
         signal = np.zeros((length, self.n_trotters))
@@ -75,7 +74,7 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
 
         history = []
         for step in range(self.monte_carlo_steps):
-            history.append([step, self._select_best_energy_among_trotters(x, linear, quadratic, offset)])
+            history.append([step, self._select_best_energy_among_trotters(x, problem)])
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
             coupling_strength = self.coupling_scheduler.update(step, self.monte_carlo_steps)
 
@@ -88,7 +87,7 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
 
             # Stochastic integral computing
             noise = self.noise_magnitude * (np.random.randint(size=x.shape, low=0, high=2) * 2 - 1)
-            signal += np.dot(quad, x) - linear[:, None] + noise + coupling
+            signal += np.dot(problem.extra['symmetric_J'], x) - problem.h[:, None] + noise + coupling
 
             # Approximation of the tanh
             signal[signal >= temperature] = temperature - self.alpha
@@ -99,6 +98,6 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
 
             delay.append(x)
 
-        x = self._select_final_answer(x, linear, quadratic, offset)
-        history.append([self.monte_carlo_steps, self.compute_energy(x, linear, quadratic, offset)])
+        x = self._select_final_answer(x, problem)
+        history.append([self.monte_carlo_steps, self.compute_energy(x, problem)])
         return x, history
