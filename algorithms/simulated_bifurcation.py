@@ -1,4 +1,4 @@
-from algorithms.algorithm import IAlgorithm, Algorithm
+from algorithms.algorithm import IAlgorithm
 import numpy as np
 from typing import Tuple
 import math
@@ -6,7 +6,7 @@ from abc import abstractmethod
 from utils.schedulers import Scheduler, LinearScheduler
 
 
-class SimulatedBifurcationCommon(Algorithm):
+class ISimulatedBifurcation(IAlgorithm):
     """
     Based on High-performance combinatorial optimization based on classical mechanics
     by Hayato Goto, Kotaro Endo, Masaru Suzuki, Yoshisato Sakai, Taro Kanao, Yohei Hamakawa, Ryo Hidaka, Masaya Yamasaki
@@ -32,98 +32,23 @@ class SimulatedBifurcationCommon(Algorithm):
         self.initialization_range = initialization_range
         self.a_scheduler = a_scheduler
 
-    @staticmethod
-    @abstractmethod
-    def _compute_c0(*args, **kwargs) -> float:
-        """
-        Creation of the c0 parameter.
-        
-        :return: The initialized c0.
-        """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def _binarize(x: np.ndarray) -> np.ndarray:
-        """
-        Takes the real-value x and converts it into a solution of a valid form.
-
-        :param x: The vector to binarize.
-        :return: The binarized x.
-        """
-        raise NotImplementedError
-
-    @staticmethod
-    @abstractmethod
-    def _clip(x: np.ndarray, momenta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        """
-        When the real-value elements of x exceed given thresholds, they are clipped and their corresponding momentum
-        is set to 0. This is the 'inelastic walls' mentioned in the paper.
-
-        :param x: The positions.
-        :param momenta: The momenta.
-        :return: The updated x and momenta.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    def initialize_vector(self, length: int) -> np.ndarray:
-        """
-        Initializes a vector of given length, around a certain value, with a certain range.
-
-        :param length: Length of the vector.
-        :return: The initialized vector.
-        """
-        raise NotImplementedError
-
     def _compute_position_variation(self, momenta: np.ndarray) -> np.ndarray:
         return self.a0 * momenta * self.delta_t
 
     @abstractmethod
-    def _compute_momenta_variation(self, x: np.ndarray, a: float, c0: float, *args, **kwargs) -> np.ndarray:
+    def _compute_momenta_variation(self,
+                                   x: np.ndarray,
+                                   a: float,
+                                   c0: float,
+                                   linear: np.ndarray,
+                                   quadratic: np.ndarray,
+                                   offset: float) -> np.ndarray:
         """
-        Computes the next Euler step for the variation of momenta.
-
-        :param x: The positions.
-        :param a: Control parameter a.
-        :param c0: The c0 positive constant parameter.
-
-        :return: The variation of momenta with which to update them.
+        :param linear: Local magnetic field of the Ising model.
+        :param quadratic: Coupling coefficients of the Ising model.
+        :param offset: Energy offset of the QUBO problem.
         """
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
         raise NotImplementedError
-
-    def __call__(self, *args, **kwargs) -> Tuple:
-        # args and kwargs are here to be replaced with qubo + offset
-        # or linear + quadratic + offset depending on whether it is implemented for QUBO or Ising model.
-
-        length = self.get_length(*args, **kwargs)
-        c0 = self._compute_c0(*args, **kwargs)
-
-        x = self.initialize_vector(length)  # Positions of the element of the solution.
-        momenta = self.initialize_vector(length)  # Momentum of each element of x within the search space.
-
-        history = []  # We monitor the energy evolution at each Euler step
-        for t in range(self.euler_steps):
-            history.append([t, self.compute_energy(self._binarize(x), *args, **kwargs)])
-
-            a = self.a_scheduler.update(t, self.euler_steps)
-
-            # Euler's method: solving differential equations iteratively.
-            momenta += self._compute_momenta_variation(x, a, c0, *args, **kwargs)
-            x += self._compute_position_variation(momenta)
-            x, momenta = self._clip(x, momenta)  # "Inelastic walls" to reduce the "analog errors"
-
-        x = self._binarize(x)  # We turn the real-values into a valid combinatorial solution.
-        history.append([self.euler_steps, self.compute_energy(x, *args, **kwargs)])
-        return x, history
-
-
-class ISimulatedBifurcation(IAlgorithm, SimulatedBifurcationCommon):
-    """Ising model version of SB."""
 
     @staticmethod
     def _compute_c0(linear: np.ndarray, quadratic: np.ndarray, offset: float) -> float:
@@ -144,28 +69,33 @@ class ISimulatedBifurcation(IAlgorithm, SimulatedBifurcationCommon):
     def initialize_vector(self, length: int) -> np.ndarray:
         return (np.random.random(length) - 0.5) * self.initialization_range
 
-    @abstractmethod
-    def _compute_momenta_variation(self,
-                                   x: np.ndarray,
-                                   a: float,
-                                   c0: float,
-                                   linear: np.ndarray,
-                                   quadratic: np.ndarray,
-                                   offset: float) -> np.ndarray:
-        """
-        :param linear: Local magnetic field of the Ising model.
-        :param quadratic: Coupling coefficients of the Ising model.
-        :param offset: Energy offset of the QUBO problem.
-        """
-        raise NotImplementedError
-
     def __call__(self, linear: np.ndarray, quadratic: np.ndarray, offset: float) -> Tuple:
         """
         :param linear: Local magnetic field of the Ising model.
         :param quadratic: Coupling coefficients of the Ising model.
         :param offset: Energy offset of the QUBO problem.
         """
-        return super().__call__(linear, quadratic, offset)
+        quad = -2 * (quadratic + quadratic.T)
+        length = self.get_length(linear, quadratic, offset)
+        c0 = self._compute_c0(linear, quad, offset)
+
+        x = self.initialize_vector(length)  # Positions of the element of the solution.
+        momenta = self.initialize_vector(length)  # Momentum of each element of x within the search space.
+
+        history = []  # We monitor the energy evolution at each Euler step
+        for t in range(self.euler_steps):
+            history.append([t, self.compute_energy(self._binarize(x), linear, quadratic, offset)])
+
+            a = self.a_scheduler.update(t, self.euler_steps)
+
+            # Euler's method: solving differential equations iteratively.
+            momenta += self._compute_momenta_variation(x, a, c0, linear, quad, offset)
+            x += self._compute_position_variation(momenta)
+            x, momenta = self._clip(x, momenta)  # "Inelastic walls" to reduce the "analog errors"
+
+        x = self._binarize(x)  # We turn the real-values into a valid combinatorial solution.
+        history.append([self.euler_steps, self.compute_energy(x, linear, quadratic, offset)])
+        return x, history
 
 
 class IDiscreteSimulatedBifurcation(ISimulatedBifurcation):
@@ -178,7 +108,7 @@ class IDiscreteSimulatedBifurcation(ISimulatedBifurcation):
                                    linear: np.ndarray,
                                    quadratic: np.ndarray,
                                    offset: float) -> np.ndarray:
-        return -self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * self._binarize(x)).sum(axis=1) + linear)))
+        return self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * self._binarize(x)).sum(axis=1) + linear)))
 
 
 class IBallisticSimulatedBifurcation(ISimulatedBifurcation):
@@ -191,4 +121,4 @@ class IBallisticSimulatedBifurcation(ISimulatedBifurcation):
                                    linear: np.ndarray,
                                    quadratic: np.ndarray,
                                    offset: float) -> np.ndarray:
-        return - self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * x).sum(axis=1) + linear)))
+        return self.delta_t * (-((self.a0 - a) * x) + (c0 * ((quadratic * x).sum(axis=1) + linear)))
