@@ -3,6 +3,7 @@ import numpy as np
 from typing import Tuple
 from utils.schedulers import Scheduler, GeometricScheduler, LinearScheduler
 from utils.data_struct import *
+from utils.history import *
 
 
 class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
@@ -32,6 +33,7 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
         :param alpha: Magic value, please refer to the original paper because I have no idea why.
         :param delay_cycle: Trotters are coupled, but with a delay in the MC steps.
         """
+        super().__init__()
         self.monte_carlo_steps = monte_carlo_steps
         self.n_trotters = n_trotters
         self.temperature_scheduler = temperature_scheduler
@@ -54,8 +56,8 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
             energies.append(self.compute_energy(solution, problem))
         return x.T[np.argmin(np.array(energies))]
 
-    @staticmethod
-    def _compute_coupling(previous_x, coupling_strength):
+    def _compute_coupling(self, previous_x, coupling_strength):
+        self.oprec.float_multiplication(previous_x.size)  # coupling_strength *
         return coupling_strength * np.hstack([previous_x[:, 1:], np.zeros((previous_x.shape[0], 1))])
 
     @staticmethod
@@ -63,18 +65,54 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
         problem.extra = {"symmetric_J": -2 * (problem.J + problem.J.T)}
         return problem
 
+    def tanh(self, signal, temperature):
+        # Approximation of the tanh
+        self.oprec.float_comparison(signal.size)  # signal >= temperature
+        self.oprec.conditional_fill(signal.size)
+        self.oprec.float_sign_flip(1)  # - self.alpha
+        self.oprec.float_addition(1)  # temperature - self.alpha
+
+        signal[signal >= temperature] = temperature - self.alpha
+
+        self.oprec.float_comparison(signal.size)  # signal < -temperature
+        self.oprec.conditional_fill(signal.size)
+        self.oprec.float_sign_flip(1)  # - temperature
+
+        signal[signal < -temperature] = -temperature
+        return signal
+
+    def update_signal(self, coupling, noise, problem, signal, x):
+        self.oprec.dot_product(problem.extra['symmetric_J'], x)
+        self.oprec.float_addition(noise.size)  # + noise
+        self.oprec.float_addition(coupling.size)  # + coupling
+        self.oprec.float_sign_flip(noise.size)  # - problem.h
+        self.oprec.float_addition(signal.size)  # signal +=
+
+        signal += np.dot(problem.extra['symmetric_J'], x) - problem.h[:, None] + noise + coupling
+        return signal
+
+    def generate_noise(self, x):
+        self.oprec.random_number_generation(x.size)
+        self.oprec.float_multiplication(x.size)  # * 2
+        self.oprec.float_addition(x.size)  # - 1
+        self.oprec.float_multiplication(x.size)  # self.noise_magnitude * ...
+        return self.noise_magnitude * (np.random.randint(size=x.shape, low=0, high=2) * 2 - 1)
+
     def __call__(self, problem: IsingData) -> Tuple:
+        self.initialize_history_and_opset()
         problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
         length = self.get_length(problem)
 
-        x = np.stack([self.generate_random_solution(length) for _ in range(self.n_trotters)]).T
+        self.oprec.random_number_generation(length * self.n_trotters)
+        x = self.generate_random_solution(length, self.n_trotters)
         signal = np.zeros((length, self.n_trotters))
 
         delay = [x]
 
-        history = []
         for step in range(self.monte_carlo_steps):
-            history.append([step, self._select_best_energy_among_trotters(x, problem)])
+            self.history.record(ENERGY, self._select_best_energy_among_trotters(x, problem))
+            self.history.record(OLS)
+            self.history.record(ILS)
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
             coupling_strength = self.coupling_scheduler.update(step, self.monte_carlo_steps)
 
@@ -86,18 +124,16 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
                 coupling = 0
 
             # Stochastic integral computing
-            noise = self.noise_magnitude * (np.random.randint(size=x.shape, low=0, high=2) * 2 - 1)
-            signal += np.dot(problem.extra['symmetric_J'], x) - problem.h[:, None] + noise + coupling
-
-            # Approximation of the tanh
-            signal[signal >= temperature] = temperature - self.alpha
-            signal[signal < -temperature] = -temperature
+            noise = self.generate_noise(x)
+            signal = self.update_signal(coupling, noise, problem, signal, x)
+            signal = self.tanh(signal, temperature)
 
             # Sign function without 0
+            self.oprec.float_sign(signal.size)
             x = (signal >= 0.) * 2. - 1.
 
             delay.append(x)
 
         x = self._select_final_answer(x, problem)
-        history.append([self.monte_carlo_steps, self.compute_energy(x, problem)])
-        return x, history
+        self.history.record(ENERGY, self.compute_energy(x, problem))
+        return x, self.history

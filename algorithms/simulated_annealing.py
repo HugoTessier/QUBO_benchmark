@@ -7,6 +7,7 @@ from typing import Tuple, Callable
 from utils.schedulers import Scheduler, GeometricScheduler
 from utils.sampling import range_sampler
 from utils.data_struct import *
+from utils.history import *
 
 
 class SimulatedAnnealingCommon(Algorithm):
@@ -24,28 +25,26 @@ class SimulatedAnnealingCommon(Algorithm):
         :param temperature_scheduler: Controls the evolution of the temperature during annealing.
         :param sampler: Controls in which order to test changes in the value of elements in the solution.
         """
+        super().__init__()
         self.monte_carlo_steps = monte_carlo_steps
         self.temperature_scheduler = temperature_scheduler
         self.sampler = sampler
 
-    @staticmethod
     @abstractmethod
-    def _flip_element(x: np.ndarray, i: int) -> np.ndarray:
+    def _flip_element(self, x: np.ndarray, i: int) -> np.ndarray:
         raise NotImplementedError
 
-    @staticmethod
     @abstractmethod
-    def _compute_energy_delta(x: np.ndarray, i: int, local_energy: np.ndarray, problem: ProblemData) -> np.ndarray:
+    def _compute_energy_delta(self, x: np.ndarray, i: int, local_energy: np.ndarray,
+                              problem: ProblemData) -> np.ndarray:
         raise NotImplementedError
 
-    @staticmethod
     @abstractmethod
-    def _initialize_local_energy(x: np.ndarray, problem: ProblemData) -> np.ndarray:
+    def _initialize_local_energy(self, x: np.ndarray, problem: ProblemData) -> np.ndarray:
         raise NotImplementedError
 
-    @staticmethod
     @abstractmethod
-    def _update_local_energy(local_energy: np.ndarray, x: np.ndarray, i: int, problem: ProblemData) -> np.ndarray:
+    def _update_local_energy(self, local_energy: np.ndarray, x: np.ndarray, i: int, problem: ProblemData) -> np.ndarray:
         raise NotImplementedError
 
     @staticmethod
@@ -53,56 +52,83 @@ class SimulatedAnnealingCommon(Algorithm):
     def _preprocess_problem(problem: ProblemData) -> ProblemData:
         raise NotImplementedError
 
+    def _metropolis_test(self, delta_energy, temperature):
+        # Metropolis algorithm: the random number is in [0,1]; if the tested change in x reduces the
+        # energy, then exp(-delta_energy / temperature) > 1 and the change is accepted; otherwise, we have
+        # exp(-delta_energy / temperature) in [0,1] too and then, the change is accepted in a probabilistic
+        # way, with decreasing chances as the energy increase becomes larger.
+
+        self.oprec.float_sign_flip()  # -delta_energy
+        self.oprec.float_division()  # / temperature
+        self.oprec.float_exp()  # math.exp
+        self.oprec.random_number_generation(1)  # random.random()
+        self.oprec.float_comparison()  # >
+
+        return math.exp(min(-delta_energy / temperature, 1)) > random.random()  # min() to avoid math range error
+
     def __call__(self, problem: ProblemData) -> Tuple:
+        self.initialize_history_and_opset()
         problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
 
         length = self.get_length(problem)
+
+        self.oprec.random_number_generation(length)  # self.generate_random_solution(length)
         x = self.generate_random_solution(length)
+
         # Computation trick: it is possible to compute the delta_energy more simply by computing first a "local energy"
         # that is only updated if the change is accepted.
         local_energy = self._initialize_local_energy(x, problem)
 
-        history = []  # We monitor the energy evolution at each Monte-Carlo step
         for step in range(self.monte_carlo_steps):
-            history.append([step, self.compute_energy(x, problem)])
+            self.history.record(ENERGY, self.compute_energy(x, problem))
+            self.history.record(OLS)
 
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
             for i in self.sampler(length):
+                self.history.record(ILS)
+
                 delta_energy = self._compute_energy_delta(x, i, local_energy, problem)
 
-                # Metropolis algorithm: the random number is in [0,1]; if the tested change in x reduces the
-                # energy, then exp(-delta_energy / temperature) > 1 and the change is accepted; otherwise, we have
-                # exp(-delta_energy / temperature) in [0,1] too and then, the change is accepted in a probabilistic
-                # way, with decreasing chances as the energy increase becomes larger.
-                if math.exp(min(-delta_energy / temperature, 1)) > random.random():  # min() to avoid math range error
+                if self._metropolis_test(delta_energy, temperature):  # min() to avoid math range error
                     # We accept the change in the i-th element of x
                     x = self._flip_element(x, i)
                     local_energy = self._update_local_energy(local_energy, x, i, problem)
 
-        history.append([self.monte_carlo_steps, self.compute_energy(x, problem)])
-        return x, history
+        self.history.record(ENERGY, self.compute_energy(x, problem))
+        return x, self.history
 
 
 class QSimulatedAnnealing(QAlgorithm, SimulatedAnnealingCommon):
     """QUBO version of SA."""
 
-    @staticmethod
-    def _flip_element(x: np.ndarray, i: int) -> np.ndarray:
+    def _flip_element(self, x: np.ndarray, i: int) -> np.ndarray:
+        self.oprec.spin_flip()
         x[i] = int(x[i] == 0)
         return x
 
-    @staticmethod
-    def _compute_energy_delta(x: np.ndarray, i: int, local_energy: np.ndarray, problem: QUBOData) -> np.ndarray:
+    def _compute_energy_delta(self, x: np.ndarray, i: int, local_energy: np.ndarray, problem: QUBOData) -> np.ndarray:
+        self.oprec.value_check()  # 1 if x[i] == 0 else -1
         flip_direction = 1 if x[i] == 0 else -1  # x_after - x_before
+
+        self.oprec.float_multiplication()  # 2 * x[i]
+        self.oprec.float_sign_flip()  # - (2 * x[i])
+        self.oprec.float_addition()  # 1 - ...
+        self.oprec.float_multiplication()  # problem.Q[i, i] * ...
+        self.oprec.float_addition()  # local_energy[i] + ...
+        self.oprec.float_multiplication()  # flip_direction *
+
         return flip_direction * (local_energy[i] + (problem.Q[i, i] * (1 - (2 * x[i]))))
 
-    @staticmethod
-    def _initialize_local_energy(x: np.ndarray, problem: QUBOData) -> np.ndarray:
+    def _initialize_local_energy(self, x: np.ndarray, problem: QUBOData) -> np.ndarray:
+        self.oprec.dot_product(problem.extra['symmetric_Q'], x)
         return np.dot(problem.extra['symmetric_Q'], x)
 
-    @staticmethod
-    def _update_local_energy(local_energy: np.ndarray, x: np.ndarray, i: int, problem: QUBOData) -> np.ndarray:
+    def _update_local_energy(self, local_energy: np.ndarray, x: np.ndarray, i: int, problem: QUBOData) -> np.ndarray:
+        self.oprec.value_check()  # -1 if x[i] == 0 else 1
         flip_direction = -1 if x[i] == 0 else 1
+
+        self.oprec.float_multiplication(problem.extra['symmetric_Q'][:, i].size)  # flip_direction * ...
+        self.oprec.float_addition(problem.extra['symmetric_Q'][:, i].size)  # +=
         local_energy += flip_direction * problem.extra['symmetric_Q'][:, i]
         return local_energy
 
@@ -118,22 +144,28 @@ class QSimulatedAnnealing(QAlgorithm, SimulatedAnnealingCommon):
 class ISimulatedAnnealing(IAlgorithm, SimulatedAnnealingCommon):
     """Ising model version of SA."""
 
-    @staticmethod
-    def _flip_element(x: np.ndarray, i: int) -> np.ndarray:
+    def _flip_element(self, x: np.ndarray, i: int) -> np.ndarray:
+        self.oprec.spin_flip()  # Could also say flip_sign but spin flip is more generic
         x[i] = -x[i]
         return x
 
-    @staticmethod
-    def _compute_energy_delta(x: np.ndarray, i: int, local_energy: np.ndarray, problem: IsingData) -> np.ndarray:
+    def _compute_energy_delta(self, x: np.ndarray, i: int, local_energy: np.ndarray, problem: IsingData) -> np.ndarray:
+        self.oprec.float_addition()  # local_energy[i] + problem.h[i]
+        self.oprec.float_multiplication()  # -2 * x[i]
+        self.oprec.float_multiplication()  # ... * ...
+
         # No problem.J[i,i] term because in Ising model the diagonal is 0
         return (-2 * x[i]) * (local_energy[i] + problem.h[i])
 
-    @staticmethod
-    def _initialize_local_energy(x: np.ndarray, problem: IsingData) -> np.ndarray:
+    def _initialize_local_energy(self, x: np.ndarray, problem: IsingData) -> np.ndarray:
+        self.oprec.dot_product(problem.extra['symmetric_J'], x)
         return np.dot(problem.extra['symmetric_J'], x)
 
-    @staticmethod
-    def _update_local_energy(local_energy: np.ndarray, x: np.ndarray, i: int, problem: IsingData) -> np.ndarray:
+    def _update_local_energy(self, local_energy: np.ndarray, x: np.ndarray, i: int, problem: IsingData) -> np.ndarray:
+        self.oprec.float_multiplication()  # 2 * x[i]
+        self.oprec.float_multiplication(problem.extra['symmetric_J'][:, i].size)  # 2 * x[i] * ...
+        self.oprec.float_addition(problem.extra['symmetric_J'][:, i].size)  # +=
+
         local_energy += 2 * x[i] * problem.extra['symmetric_J'][:, i]
         return local_energy
 

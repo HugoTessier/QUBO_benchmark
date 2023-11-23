@@ -2,10 +2,20 @@ from abc import ABC, abstractmethod
 import numpy as np
 from typing import Tuple
 from utils.data_struct import *
+from utils.history import History
+from utils.operations import OperationsRecorder
 
 
 class Algorithm(ABC):
     """Any algorithm that is able to solve a combinatorial optimization problem."""
+
+    def __init__(self):
+        self.history: History = None
+        self.oprec: OperationsRecorder = None
+
+    def initialize_history_and_opset(self):
+        self.history = History()
+        self.oprec = OperationsRecorder(self.history)
 
     @staticmethod
     @abstractmethod
@@ -41,7 +51,7 @@ class Algorithm(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def __call__(self, problem: ProblemData) -> Tuple:
+    def __call__(self, problem: ProblemData) -> Tuple[np.ndarray, History]:
         """
         Solves a CO problem using a given algorithm.
         :param problem: Object containing the data of the problem to solve.
@@ -68,7 +78,7 @@ class QAlgorithm(Algorithm):
         return problem.Q.shape[0]
 
     @abstractmethod
-    def __call__(self, problem: QUBOData) -> Tuple:
+    def __call__(self, problem: QUBOData) -> Tuple[np.ndarray, History]:
         return super().__call__(problem)
 
 
@@ -88,5 +98,5 @@ class IAlgorithm(Algorithm):
         return problem.J.shape[0]
 
     @abstractmethod
-    def __call__(self, problem: IsingData) -> Tuple:
+    def __call__(self, problem: IsingData) -> Tuple[np.ndarray, History]:
         return super().__call__(problem)

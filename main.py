@@ -4,6 +4,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from utils import schedulers as sch
 from utils import sampling as sp
+from utils.history import *
+from utils.operations import *
 
 if __name__ == '__main__':
     nsteps = 150
@@ -13,7 +15,6 @@ if __name__ == '__main__':
     ising_data = maxcut.ising(seed)
     name, size, best = maxcut.get_gset_info(seed)
 
-    baseline_qubo = qubo_baseline(100, qubo_data)
     baseline_ising = ising_baseline(100, ising_data)
 
     qubo_solvers = {
@@ -45,23 +46,38 @@ if __name__ == '__main__':
         ),
     }
 
+    ax1 = plt.subplot(311)
+    ax2 = plt.subplot(312)
+    ax3 = plt.subplot(313)
+    axes = [ax1, ax2, ax3]
     for k, v in qubo_solvers.items():
         print(k)
         _, history_sa = v(qubo_data)
-        history_sa = np.array(history_sa)
-        plt.plot(history_sa[:, 0], history_sa[:, 1], label=k)
+        x, y = history_sa.plot(x_key=[OLS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        ax1.plot(x, y, label=k)
+        x, y = history_sa.plot(x_key=[ILS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        ax2.plot(x, y, label=k)
+        x, y = history_sa.plot(x_key=ALL_OPERATIONS, y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        ax3.plot(x, y, label=k)
     for k, v in ising_solvers.items():
         print(k)
         _, history_sa = v(ising_data)
-        history_sa = np.array(history_sa)
-        plt.plot(history_sa[:, 0], history_sa[:, 1], label=k)
+        x, y = history_sa.plot(x_key=[OLS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        ax1.plot(x, y, label=k)
+        x, y = history_sa.plot(x_key=[ILS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        ax2.plot(x, y, label=k)
+        x, y = history_sa.plot(x_key=ALL_OPERATIONS, y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        ax3.plot(x, y, label=k)
+    for ax in axes:
+        ax.axhline(baseline_ising, label='Baseline', linestyle='dashed', color='red')
+        ax.axhline(-best, label='Best known', linestyle='dashed', color='blue')
+        ax.legend()
 
-    plt.axhline(baseline_qubo, label='Baseline QUBO')
-    plt.axhline(baseline_ising, label='Baseline Ising')
-    plt.axhline(-best, label='Best known')
-
-    plt.xlabel('Number of Monte Carlo steps')
-    plt.ylabel('Energy')
-    plt.legend()
-    plt.title(f'MaxCut GSET {name} ({size} nodes)')
+    ax1.set_xlabel('Number of outermost loop steps')
+    ax1.set_ylabel('Energy')
+    ax2.set_xlabel('Number of sequential innermost loop steps')
+    ax2.set_ylabel('Energy')
+    ax3.set_xlabel('Mass of Operations')
+    ax3.set_ylabel('Energy')
+    plt.suptitle(f'MaxCut GSET {name} ({size} nodes)')
     plt.show()
