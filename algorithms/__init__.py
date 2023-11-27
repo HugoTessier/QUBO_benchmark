@@ -4,6 +4,7 @@ from algorithms.simulated_bifurcation import IBallisticSimulatedBifurcation, IDi
 from algorithms.baseline import qubo_baseline, ising_baseline
 from algorithms.stochastic_simulated_annealing import IStochasticSimulatedAnnealing
 from algorithms.stochastic_simulated_quantum_annealing import IStochasticSimulatedQuantumAnnealing
+from algorithms.simulated_coherent_ising_machines import SimulatedCoherentIsingMachines
 
 __all__ = ['QSimulatedAnnealing',
            'ISimulatedAnnealing',
@@ -13,5 +14,6 @@ __all__ = ['QSimulatedAnnealing',
            'IDiscreteSimulatedBifurcation',
            'IStochasticSimulatedAnnealing',
            'IStochasticSimulatedQuantumAnnealing',
+           'SimulatedCoherentIsingMachines',
            'qubo_baseline',
            'ising_baseline']

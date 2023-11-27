@@ -51,7 +51,7 @@ class ISimulatedBifurcation(IAlgorithm):
 
     def _binarize(self, x: np.ndarray) -> np.ndarray:
         self.oprec.float_sign(x.size)
-        return np.sign(x)
+        return (x >= 0.) * 2. - 1.
 
     def _clip(self, x: np.ndarray, momenta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         self.oprec.float_comparison(x.size * 2)  # x > 1, x < -1
@@ -71,7 +71,7 @@ class ISimulatedBifurcation(IAlgorithm):
         problem.extra = {"symmetric_J": -2 * (problem.J + problem.J.T)}
         return problem
 
-    def __call__(self, problem: IsingData) -> Tuple:
+    def __call__(self, problem: IsingData) -> Tuple[np.ndarray, History]:
         self.initialize_history_and_opset()
         problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
 

@@ -75,6 +75,23 @@ class GeometricScheduler(Scheduler):
         return value
 
 
+class TanHScheduler(Scheduler):
+    """Hyperbolic tangent scheduler."""
+
+    def __init__(self, multiplier: float, steepness: float, offset: float):
+        """
+        :param multiplier: Maximum absolute value
+        :param steepness: Steepness of the tanh (when infinity, becomes a sort of heaviside function).
+        :param offset: Additive constant.
+        """
+        self.multiplier = multiplier
+        self.steepness = steepness
+        self.offset = offset
+
+    def update(self, i: int, n: int) -> float:
+        return self.multiplier * (1 - math.tanh((i / n * 2 - 1) * self.steepness)) + self.offset
+
+
 class DiscreteScheduler(Scheduler):
     """Discretizes a given scheduling."""
 

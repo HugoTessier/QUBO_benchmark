@@ -98,7 +98,7 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
 
         return math.exp(min(-delta_energy / temperature, 1)) > random.random()
 
-    def __call__(self, problem: ProblemData) -> Tuple:
+    def __call__(self, problem: ProblemData) -> Tuple[np.ndarray, History]:
         self.initialize_history_and_opset()
         problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
         length = self.get_length(problem)
@@ -202,7 +202,7 @@ class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
         problem.extra = {"symmetric_Q": problem.Q + problem.Q.T}
         return problem
 
-    def __call__(self, problem: QUBOData) -> Tuple:
+    def __call__(self, problem: QUBOData) -> Tuple[np.ndarray, History]:
         return super().__call__(problem)
 
 
@@ -256,5 +256,5 @@ class ISimulatedQuantumAnnealing(IAlgorithm, SimulatedQuantumAnnealingCommon):
         problem.extra = {"symmetric_J": problem.J + problem.J.T}
         return problem
 
-    def __call__(self, problem: IsingData) -> Tuple:
+    def __call__(self, problem: IsingData) -> Tuple[np.ndarray, History]:
         return super().__call__(problem)

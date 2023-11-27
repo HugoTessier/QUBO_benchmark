@@ -71,7 +71,7 @@ class IStochasticSimulatedAnnealing(IAlgorithm):
 
         return self.noise_magnitude * (np.random.randint(size=signal.shape, low=0, high=2) * 2 - 1)
 
-    def __call__(self, problem: IsingData) -> Tuple:
+    def __call__(self, problem: IsingData) -> Tuple[np.ndarray, History]:
         self.initialize_history_and_opset()
         problem = self._preprocess_problem(problem)  # Allows computation optimization tricks
         length = self.get_length(problem)
