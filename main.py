@@ -18,9 +18,9 @@ if __name__ == '__main__':
     baseline_ising = ising_baseline(100, ising_data)
 
     qubo_solvers = {
-        'Simulated Annealing QUBO': QSimulatedAnnealing(monte_carlo_steps=nsteps),
-        'Simulated Quantum Annealing QUBO': QSimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
-                                                                       n_trotters=10),
+        # 'Simulated Annealing QUBO': QSimulatedAnnealing(monte_carlo_steps=nsteps),
+        # 'Simulated Quantum Annealing QUBO': QSimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
+        #                                                                n_trotters=10),
     }
 
     ising_solvers = {
@@ -54,20 +54,22 @@ if __name__ == '__main__':
     for k, v in qubo_solvers.items():
         print(k)
         _, history_sa = v(qubo_data)
-        x, y = history_sa.plot(x_key=[MAIN_LOOP], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_parser=SumParser({MAIN_LOOP: 1}), y_parser=InstantParser({ENERGY: 1}))
         ax1.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[SEQUENCE], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_parser=SumParser({SEQUENCE: 1}), y_parser=InstantParser({ENERGY: 1}))
         ax2.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[MULTIPLICATION, ADDITION], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_parser=SumParser({MULTIPLICATION: 1, ADDITION: 1}),
+                               y_parser=InstantParser({ENERGY: 1}))
         ax3.plot(x, y, label=k)
     for k, v in ising_solvers.items():
         print(k)
         _, history_sa = v(ising_data)
-        x, y = history_sa.plot(x_key=[MAIN_LOOP], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_parser=SumParser({MAIN_LOOP: 1}), y_parser=InstantParser({ENERGY: 1}))
         ax1.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[SEQUENCE], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_parser=SumParser({SEQUENCE: 1}), y_parser=InstantParser({ENERGY: 1}))
         ax2.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[MULTIPLICATION, ADDITION], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_parser=SumParser({MULTIPLICATION: 1, ADDITION: 1}),
+                               y_parser=InstantParser({ENERGY: 1}))
         ax3.plot(x, y, label=k)
     for ax in axes:
         ax.axhline(baseline_ising, label='Baseline', linestyle='dashed', color='red')

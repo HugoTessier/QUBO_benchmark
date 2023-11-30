@@ -1,14 +1,53 @@
-from typing import Any, Tuple, List
+from typing import Any, Tuple, List, Dict
+from abc import ABC, abstractmethod
 
-__all__ = ['History', 'MAIN_LOOP', 'SEQUENCE', 'ENERGY', 'INSTANT', 'SUM']
+__all__ = ['History', 'MAIN_LOOP', 'SEQUENCE', 'ENERGY', 'InstantParser', 'SumParser']
 
 # Constants for convenience
 MAIN_LOOP = "MAIN_LOOP"
 SEQUENCE = "SEQUENCE"
 ENERGY = "ENERGY"
 
-INSTANT = "INSTANT"
-SUM = "SUM"
+
+class HistoryParser(ABC):
+    """Reads history entries, sorts, weights and processes them."""
+
+    def __init__(self, keys_weights_dict: Dict):
+        self.keys_weights_dict = keys_weights_dict
+        self.content = None
+        self.new_value = False
+
+    @abstractmethod
+    def _parse_new_value(self, value):
+        raise NotImplementedError
+
+    def read_new_value(self, key, value):
+        if key in self.keys_weights_dict:
+            self._parse_new_value(value * self.keys_weights_dict[key])
+            self.new_value = True
+
+    def got_new_value(self):
+        return self.new_value
+
+    def get_value(self):
+        self.new_value = False
+        return self.content
+
+
+class InstantParser(HistoryParser):
+    """Just gives back the last read value."""
+
+    def _parse_new_value(self, value):
+        self.content = value
+
+
+class SumParser(HistoryParser):
+    """Gives the sum of all read entries."""
+
+    def _parse_new_value(self, value):
+        if self.content is None:
+            self.content = 0
+        self.content += value
 
 
 class History:
@@ -37,79 +76,34 @@ class History:
         """
         self.content.append((key, value))
 
-    def plot(self, x_key: List[str], y_key: List[str], x_mode: str = SUM,
-             y_mode: str = INSTANT, x_weights: dict = None, y_weights: dict = None) -> Tuple[List, List]:
+    def plot(self, x_parser: HistoryParser, y_parser: HistoryParser) -> Tuple[List, List]:
         """
         Generates a list of coordinates values of y as a function of x.
-        x and y have to possible modes:
-            1) "instant": considers the last value encountered.
-            2) "sum": considers the sum of all previously encountered entries.
-        The default values provide an example: if we have the x_key corresponding to a step increase, then x_mode="sum"
-        means we plot the progression across elapsed steps; if the y_key is some sort of energy, then y_mode="instant"
-        means that, for each step incrementation, we give the first next recorded energy (or the last one if there are
-        some more steps recorded after the last energy entry).
-        Having the y_mode="sum" could be used, for example, to plot the total mass of operations executed since the
-        beginning for each step.
+        These x and y are parsed from the history using the HistoryParser objects.
 
-        The weights can be used to give a different importance to every key in x or y. For example, if x is a list of
-        possible operations, such as addition or multiplication, it is possible to tell if we want multiplications to
-        cost more than addition, which will then be accounted in the produced plot.
-
-        :param x_key: The key elements to consider as the x.
-        :param y_key: The key elements to consider as the y.
-        :param x_mode: "instant" or "sum"
-        :param y_mode: "instant" or "sum"
-        :param x_weights: Weights of each type of element in x.
-        :param y_weights: Weights of each type of element in y.
+        :param x_parser: HistoryParser dedicated to x.
+        :param y_parser: HistoryParser dedicated to y.
         :return: x and y as two lists.
         """
         x = []
         y = []
-        x_temp = 0
-        y_temp = 0
-        x_to_fill = []
+        last_x = None
+        last_y = None
         for k, v in self.content:
-            if k in x_key:
-                if x_weights is not None:  # Apply weight
-                    if k in x_weights:
-                        v *= x_weights[k]
-                if x_mode == INSTANT:  # In both cases, we prepare the room for the next y we will put there
-                    x.append(v)
-                    y.append(None)
-                    x_to_fill.append(len(y) - 1)
-                elif x_mode == SUM:
-                    x_temp += v
-                    x.append(x_temp)
-                    y.append(None)
-                    x_to_fill.append(len(y) - 1)
-                else:
-                    raise ValueError
-            if k in y_key:
-                if y_weights is not None:  # Apply weight
-                    if k in y_weights:
-                        v *= y_weights[k]
-                if y_mode == INSTANT:
-                    for i in x_to_fill:
-                        y[i] = v
-                    if len(x_to_fill) == 0:  # If nowhere to be inserted, then it means we're still in the previous x
-                        x.append(x_temp)
-                        y.append(v)
-                elif y_mode == SUM:
-                    y_temp += v
-                    for i in x_to_fill:
-                        y[i] = y_temp
-                    if len(x_to_fill) == 0:
-                        x.append(x_temp)
-                        y.append(y_temp)
-                else:
-                    raise ValueError
-                x_to_fill = []
-
-        # If there x after the last y, then we replace the last None values in y by the last valid y value
-        y_temp = None
-        for i, v in enumerate(y):
-            if v is None:
-                y[i] = y_temp
+            x_parser.read_new_value(k, v)
+            y_parser.read_new_value(k, v)
+            if x_parser.got_new_value() or y_parser.got_new_value():
+                last_x = x_parser.get_value()
+                last_y = y_parser.get_value()
+            if last_x is None or last_y is None:
+                continue
             else:
-                y_temp = v
+                if len(x) == 0 and len(y) == 0:
+                    x.append(last_x)
+                    y.append(last_y)
+                else:
+                    if last_x != x[-1] and last_y != y[-1]:
+                        x.append(last_x)
+                        y.append(last_y)
+
         return x, y
