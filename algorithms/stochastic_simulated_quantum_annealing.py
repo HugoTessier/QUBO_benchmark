@@ -56,8 +56,8 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
             energies.append(self.compute_energy(solution, problem))
         return x.T[np.argmin(np.array(energies))]
 
-    def _compute_coupling(self, previous_x, coupling_strength):
-        self.oprec.float_multiplication(previous_x.size)  # coupling_strength *
+    def _compute_coupling(self, previous_x: np.ndarray, coupling_strength: float) -> np.ndarray:
+        self.oprec.multiplication(previous_x.size)  # coupling_strength *
         return coupling_strength * np.hstack([previous_x[:, 1:], np.zeros((previous_x.shape[0], 1))])
 
     @staticmethod
@@ -65,37 +65,34 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
         problem.extra = {"symmetric_J": -2 * (problem.J + problem.J.T)}
         return problem
 
-    def tanh(self, signal, temperature):
+    def tanh(self, signal: np.ndarray, temperature: float) -> np.ndarray:
         # Approximation of the tanh
-        self.oprec.float_comparison(signal.size)  # signal >= temperature
+        self.oprec.comparison(signal.size)  # signal >= temperature
         self.oprec.conditional_fill(signal.size)
-        self.oprec.float_sign_flip(1)  # - self.alpha
-        self.oprec.float_addition(1)  # temperature - self.alpha
-
+        self.oprec.sign_flip(1)  # - self.alpha
+        self.oprec.addition(1)  # temperature - self.alpha
         signal[signal >= temperature] = temperature - self.alpha
 
-        self.oprec.float_comparison(signal.size)  # signal < -temperature
+        self.oprec.comparison(signal.size)  # signal < -temperature
         self.oprec.conditional_fill(signal.size)
-        self.oprec.float_sign_flip(1)  # - temperature
-
+        self.oprec.sign_flip(1)  # - temperature
         signal[signal < -temperature] = -temperature
         return signal
 
-    def update_signal(self, coupling, noise, problem, signal, x):
+    def update_signal(self, coupling: np.ndarray, noise: np.ndarray, problem: IsingData, signal: np.ndarray,
+                      x: np.ndarray) -> np.ndarray:
         self.oprec.dot_product(problem.extra['symmetric_J'], x)
-        self.oprec.float_addition(noise.size)  # + noise
-        self.oprec.float_addition(coupling.size)  # + coupling
-        self.oprec.float_sign_flip(noise.size)  # - problem.h
-        self.oprec.float_addition(signal.size)  # signal +=
+        self.oprec.subtraction(problem.h.size)
+        energy_term = np.dot(problem.extra['symmetric_J'], x) - problem.h[:, None]
 
-        signal += np.dot(problem.extra['symmetric_J'], x) - problem.h[:, None] + noise + coupling
+        self.oprec.addition(noise.size)  # + noise
+        self.oprec.addition(coupling.size)  # + coupling
+        self.oprec.addition(signal.size)  # signal +=
+        signal += energy_term + noise + coupling
         return signal
 
-    def generate_noise(self, x):
+    def generate_noise(self, x: np.ndarray) -> np.ndarray:
         self.oprec.random_number_generation(x.size)
-        self.oprec.float_multiplication(x.size)  # * 2
-        self.oprec.float_addition(x.size)  # - 1
-        self.oprec.float_multiplication(x.size)  # self.noise_magnitude * ...
         return self.noise_magnitude * (np.random.randint(size=x.shape, low=0, high=2) * 2 - 1)
 
     def __call__(self, problem: IsingData) -> Tuple[np.ndarray, History]:
@@ -111,8 +108,8 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
 
         for step in range(self.monte_carlo_steps):
             self.history.record(ENERGY, self._select_best_energy_among_trotters(x, problem))
-            self.history.record(OLS)
-            self.history.record(ILS)
+            self.history.record(MAIN_LOOP)
+            self.history.record(SEQUENCE)
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
             coupling_strength = self.coupling_scheduler.update(step, self.monte_carlo_steps)
 
@@ -129,7 +126,7 @@ class IStochasticSimulatedQuantumAnnealing(IAlgorithm):
             signal = self.tanh(signal, temperature)
 
             # Sign function without 0
-            self.oprec.float_sign(signal.size)
+            self.oprec.sign(signal.size)
             x = (signal >= 0.) * 2. - 1.
 
             delay.append(x)

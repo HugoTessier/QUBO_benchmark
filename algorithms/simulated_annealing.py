@@ -58,13 +58,14 @@ class SimulatedAnnealingCommon(Algorithm):
         # exp(-delta_energy / temperature) in [0,1] too and then, the change is accepted in a probabilistic
         # way, with decreasing chances as the energy increase becomes larger.
 
-        self.oprec.float_sign_flip()  # -delta_energy
-        self.oprec.float_division()  # / temperature
-        self.oprec.float_exp()  # math.exp
-        self.oprec.random_number_generation(1)  # random.random()
-        self.oprec.float_comparison()  # >
+        self.oprec.sign_flip()  # -delta_energy
+        self.oprec.division()  # / temperature
+        self.oprec.exp()  # math.exp
+        probability = math.exp(min(-delta_energy / temperature, 1))  # min() to avoid math range error
 
-        return math.exp(min(-delta_energy / temperature, 1)) > random.random()  # min() to avoid math range error
+        self.oprec.random_number_generation(1)  # random.random()
+        self.oprec.comparison()  # >
+        return probability > random.random()
 
     def __call__(self, problem: ProblemData) -> Tuple[np.ndarray, History]:
         self.initialize_history_and_opset()
@@ -81,12 +82,11 @@ class SimulatedAnnealingCommon(Algorithm):
 
         for step in range(self.monte_carlo_steps):
             self.history.record(ENERGY, self.compute_energy(x, problem))
-            self.history.record(OLS)
+            self.history.record(MAIN_LOOP)
 
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
             for i in self.sampler(length):
-                self.history.record(ILS)
-
+                self.history.record(SEQUENCE)
                 delta_energy = self._compute_energy_delta(x, i, local_energy, problem)
 
                 if self._metropolis_test(delta_energy, temperature):  # min() to avoid math range error
@@ -110,14 +110,16 @@ class QSimulatedAnnealing(QAlgorithm, SimulatedAnnealingCommon):
         self.oprec.value_check()  # 1 if x[i] == 0 else -1
         flip_direction = 1 if x[i] == 0 else -1  # x_after - x_before
 
-        self.oprec.float_multiplication()  # 2 * x[i]
-        self.oprec.float_sign_flip()  # - (2 * x[i])
-        self.oprec.float_addition()  # 1 - ...
-        self.oprec.float_multiplication()  # problem.Q[i, i] * ...
-        self.oprec.float_addition()  # local_energy[i] + ...
-        self.oprec.float_multiplication()  # flip_direction *
+        self.oprec.multiplication()  # 2 * x[i]
+        self.oprec.subtraction()  # 1 -  (2 * x[i])
+        self.oprec.multiplication()  # problem.Q[i, i] * ...
+        diagonal_term = problem.Q[i, i] * (1 - (2 * x[i]))
 
-        return flip_direction * (local_energy[i] + (problem.Q[i, i] * (1 - (2 * x[i]))))
+        self.oprec.addition()  # local_energy[i] + ...
+        energy_delta = local_energy[i] + diagonal_term
+
+        self.oprec.multiplication()  # flip_direction *
+        return flip_direction * energy_delta
 
     def _initialize_local_energy(self, x: np.ndarray, problem: QUBOData) -> np.ndarray:
         self.oprec.dot_product(problem.extra['symmetric_Q'], x)
@@ -127,8 +129,8 @@ class QSimulatedAnnealing(QAlgorithm, SimulatedAnnealingCommon):
         self.oprec.value_check()  # -1 if x[i] == 0 else 1
         flip_direction = -1 if x[i] == 0 else 1
 
-        self.oprec.float_multiplication(problem.extra['symmetric_Q'][:, i].size)  # flip_direction * ...
-        self.oprec.float_addition(problem.extra['symmetric_Q'][:, i].size)  # +=
+        self.oprec.multiplication(problem.extra['symmetric_Q'][:, i].size)  # flip_direction * ...
+        self.oprec.addition(problem.extra['symmetric_Q'][:, i].size)  # +=
         local_energy += flip_direction * problem.extra['symmetric_Q'][:, i]
         return local_energy
 
@@ -150,9 +152,9 @@ class ISimulatedAnnealing(IAlgorithm, SimulatedAnnealingCommon):
         return x
 
     def _compute_energy_delta(self, x: np.ndarray, i: int, local_energy: np.ndarray, problem: IsingData) -> np.ndarray:
-        self.oprec.float_addition()  # local_energy[i] + problem.h[i]
-        self.oprec.float_multiplication()  # -2 * x[i]
-        self.oprec.float_multiplication()  # ... * ...
+        self.oprec.addition()  # local_energy[i] + problem.h[i]
+        self.oprec.multiplication()  # -2 * x[i]
+        self.oprec.multiplication()  # ... * ...
 
         # No problem.J[i,i] term because in Ising model the diagonal is 0
         return (-2 * x[i]) * (local_energy[i] + problem.h[i])
@@ -162,9 +164,9 @@ class ISimulatedAnnealing(IAlgorithm, SimulatedAnnealingCommon):
         return np.dot(problem.extra['symmetric_J'], x)
 
     def _update_local_energy(self, local_energy: np.ndarray, x: np.ndarray, i: int, problem: IsingData) -> np.ndarray:
-        self.oprec.float_multiplication()  # 2 * x[i]
-        self.oprec.float_multiplication(problem.extra['symmetric_J'][:, i].size)  # 2 * x[i] * ...
-        self.oprec.float_addition(problem.extra['symmetric_J'][:, i].size)  # +=
+        self.oprec.multiplication()  # 2 * x[i]
+        self.oprec.multiplication(problem.extra['symmetric_J'][:, i].size)  # 2 * x[i] * ...
+        self.oprec.addition(problem.extra['symmetric_J'][:, i].size)  # +=
 
         local_energy += 2 * x[i] * problem.extra['symmetric_J'][:, i]
         return local_energy

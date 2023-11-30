@@ -3,7 +3,7 @@ from utils.data_struct import *
 from utils.history import *
 from typing import Tuple
 import numpy as np
-from utils.schedulers import TanHScheduler
+from utils.schedulers import TanHScheduler, Scheduler
 
 
 class SimulatedCoherentIsingMachines(IAlgorithm):
@@ -21,10 +21,16 @@ class SimulatedCoherentIsingMachines(IAlgorithm):
     """
 
     def __init__(self,
-                 n_steps,
-                 nu_scheduler=TanHScheduler(multiplier=4, steepness=3, offset=0),
-                 zeta=10.,
-                 noise_magnitude=1.):
+                 n_steps: int,
+                 nu_scheduler: Scheduler = TanHScheduler(multiplier=4, steepness=3, offset=0),
+                 zeta: float = 10.,
+                 noise_magnitude: float = 1.):
+        """
+        :param n_steps: Number of main loop steps.
+        :param nu_scheduler: Controls the evolution of the hyperparameter nu (lasting term).
+        :param zeta: Constant hyperparameter zeta (energy term).
+        :param noise_magnitude: Constant magnitude of the noise term.
+        """
         super().__init__()
         self.n_steps = n_steps
         self.nu_scheduler = nu_scheduler
@@ -37,8 +43,8 @@ class SimulatedCoherentIsingMachines(IAlgorithm):
         return problem
 
     def _binarize(self, x: np.ndarray) -> np.ndarray:
-        self.oprec.float_sign(x.size)
-        return (x >= 0.) * 2. - 1.
+        self.oprec.sign(x.size)
+        return (x >= 0.) * 2. - 1.  # Sign function
 
     def __call__(self, problem: IsingData) -> Tuple[np.ndarray, History]:
         self.initialize_history_and_opset()
@@ -50,21 +56,25 @@ class SimulatedCoherentIsingMachines(IAlgorithm):
 
         for step in range(self.n_steps):
             self.history.record(ENERGY, self.compute_energy(self._binarize(x), problem))
-            self.history.record(OLS)
-            self.history.record(ILS)
+            self.history.record(MAIN_LOOP)
+            self.history.record(SEQUENCE)
 
             nu = self.nu_scheduler.update(step, self.n_steps)
 
             self.oprec.random_number_generation(x.size)
-            self.oprec.float_multiplication(x.size)  # * self.noise_magnitude
+            self.oprec.multiplication(x.size)  # * self.noise_magnitude
             f = np.random.normal(size=x.shape) * self.noise_magnitude
 
             self.oprec.dot_product(problem.extra['symmetric_J'], x)
-            self.oprec.float_multiplication(x.size)  # self.zeta * ...
-            self.oprec.float_multiplication(x.size)  # nu * x
-            self.oprec.float_addition(x.size)  # nu * x + ...
-            self.oprec.float_addition(x.size)  # + f
-            x += (nu * x) + (self.zeta * np.dot(problem.extra['symmetric_J'], x)) + f
+            energy_term = np.dot(problem.extra['symmetric_J'], x)
+
+            self.oprec.multiplication(x.size)
+            lasting_term = nu * x
+
+            self.oprec.multiplication(x.size)  # self.zeta * energy_term
+            self.oprec.addition(x.size)  # lasting_term + ...
+            self.oprec.addition(x.size)  # + f
+            x += lasting_term + (self.zeta * energy_term) + f
 
             self.oprec.clip(x.size)
             x = np.clip(x, a_min=-1, a_max=1)

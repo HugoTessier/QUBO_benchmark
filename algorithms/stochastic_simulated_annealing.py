@@ -38,37 +38,37 @@ class IStochasticSimulatedAnnealing(IAlgorithm):
         problem.extra = {"symmetric_J": -2 * (problem.J + problem.J.T)}
         return problem
 
-    def tanh(self, signal, temperature):
+    def tanh(self, signal: np.ndarray, temperature: float) -> np.ndarray:
         # Approximation of the tanh
-        self.oprec.float_comparison(signal.size)  # signal >= temperature
+
+        self.oprec.subtraction()
+        upper_value = temperature - self.alpha
+
+        self.oprec.comparison(signal.size)  # signal >= temperature
         self.oprec.conditional_fill(signal.size)
-        self.oprec.float_sign_flip(1)  # - self.alpha
-        self.oprec.float_addition(1)  # temperature - self.alpha
+        signal[signal >= temperature] = upper_value
 
-        signal[signal >= temperature] = temperature - self.alpha
+        self.oprec.sign_flip()  # - temperature
+        lower_value = -temperature
 
-        self.oprec.float_comparison(signal.size)  # signal < -temperature
+        self.oprec.comparison(signal.size)  # signal < -temperature
         self.oprec.conditional_fill(signal.size)
-        self.oprec.float_sign_flip(1)  # - temperature
+        signal[signal < -temperature] = lower_value
 
-        signal[signal < -temperature] = -temperature
         return signal
 
-    def update_signal(self, noise, problem, signal, x):
+    def update_signal(self, noise: np.ndarray, problem: IsingData, signal: np.ndarray, x: np.ndarray) -> np.ndarray:
         self.oprec.dot_product(problem.extra['symmetric_J'], x)
-        self.oprec.float_addition(x.size)  # noise + ...
-        self.oprec.float_sign_flip(problem.h.size)  # - problem.h
-        self.oprec.float_addition(signal.size)  # signal +=
+        self.oprec.subtraction(problem.h.size)  # - problem.h
+        energy_term = np.dot(problem.extra['symmetric_J'], x) - problem.h
 
-        signal += noise + np.dot(problem.extra['symmetric_J'], x) - problem.h
+        self.oprec.addition(x.size)  # noise + ...
+        self.oprec.addition(signal.size)  # signal +=
+        signal += noise + energy_term
         return signal
 
-    def generate_noise(self, signal):
+    def generate_noise(self, signal: np.ndarray) -> np.ndarray:
         self.oprec.random_number_generation(signal.size)
-        self.oprec.float_multiplication(signal.size)  # * 2
-        self.oprec.float_addition(signal.size)  # - 1
-        self.oprec.float_multiplication(signal.size)  # self.noise_magnitude * ...
-
         return self.noise_magnitude * (np.random.randint(size=signal.shape, low=0, high=2) * 2 - 1)
 
     def __call__(self, problem: IsingData) -> Tuple[np.ndarray, History]:
@@ -79,12 +79,12 @@ class IStochasticSimulatedAnnealing(IAlgorithm):
         # Same initialization as the original implementation
         self.oprec.random_number_generation(length)
         x = self.generate_random_solution(length)
-        signal = np.copy(problem.h)
+        signal = np.copy(problem.h)  # Same initialization as original implementation
 
         for step in range(self.monte_carlo_steps):
             self.history.record(ENERGY, self.compute_energy(x, problem))
-            self.history.record(OLS)
-            self.history.record(ILS)
+            self.history.record(MAIN_LOOP)
+            self.history.record(SEQUENCE)
 
             temperature = self.temperature_scheduler.update(step, self.monte_carlo_steps)
 
@@ -94,7 +94,7 @@ class IStochasticSimulatedAnnealing(IAlgorithm):
             signal = self.tanh(signal, temperature)
 
             # Sign function without 0
-            self.oprec.float_sign(signal.size)
+            self.oprec.sign(signal.size)
             x = (signal >= 0.) * 2. - 1.
 
         self.history.record(ENERGY, self.compute_energy(x, problem))

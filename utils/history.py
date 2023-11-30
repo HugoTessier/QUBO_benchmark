@@ -1,13 +1,10 @@
 from typing import Any, Tuple, List
 
-__all__ = ['History', 'OLS', 'OUTERMOST_LOOP_STEP', 'ILS', 'INNERMOST_LOOP_STEP', 'ENERGY', 'INSTANT', 'SUM']
+__all__ = ['History', 'MAIN_LOOP', 'SEQUENCE', 'ENERGY', 'INSTANT', 'SUM']
 
 # Constants for convenience
-OLS = "OUTERMOST_LOOP_STEP"
-OUTERMOST_LOOP_STEP = OLS
-
-ILS = "INNERMOST_LOOP_STEP"
-INNERMOST_LOOP_STEP = ILS
+MAIN_LOOP = "MAIN_LOOP"
+SEQUENCE = "SEQUENCE"
 ENERGY = "ENERGY"
 
 INSTANT = "INSTANT"
@@ -19,9 +16,9 @@ class History:
     Class that records entries and is able to process them to provide plots.
 
     Some examples of entries (to help uniformize between different algorithms):
-        "outermost_loop_step": to increment for any Monte-Carlo/Euler/Gradient Descent step, i.e. the main loop.
-        "innermost_loop_step": to increment at any loop that has to be run sequentially and cannot be parallelized.
-        "energy": to monitor the evolution of the solution's energy.
+        "MAIN_LOOP": to increment for any Monte-Carlo/Euler/Gradient Descent step, or else...
+        "SEQUENCE": to increment everytime something cannot be parallelized with what comes before.
+        "ENERGY": to monitor the evolution of the solution's energy.
 
     Other possible entries are operations, that are defined in utils.operations.
     """

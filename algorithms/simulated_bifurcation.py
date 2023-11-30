@@ -35,12 +35,17 @@ class ISimulatedBifurcation(IAlgorithm):
         self.initialization_range = initialization_range
         self.a_scheduler = a_scheduler
 
-    def _compute_position_variation(self, momenta: np.ndarray) -> np.ndarray:
-        self.oprec.float_multiplication(momenta.size * 2)
-        return self.a0 * momenta * self.delta_t
+    def _compute_position_variation(self, x: np.ndarray, momenta: np.ndarray) -> np.ndarray:
+        self.oprec.multiplication(momenta.size * 2)
+        x_delta = self.a0 * momenta * self.delta_t
+
+        self.oprec.addition(x.size)
+        x += x_delta
+        return x
 
     @abstractmethod
-    def _compute_momenta_variation(self, x: np.ndarray, a: float, c0: float, problem) -> np.ndarray:
+    def _compute_momenta_variation(self, momenta: np.ndarray, x: np.ndarray, a: float, c0: float,
+                                   problem: IsingData) -> np.ndarray:
         raise NotImplementedError
 
     @staticmethod
@@ -50,16 +55,18 @@ class ISimulatedBifurcation(IAlgorithm):
         return 0.5 / (math.sqrt((problem.extra['symmetric_J'] ** 2).sum() / (n * (n - 1))) * math.sqrt(n))
 
     def _binarize(self, x: np.ndarray) -> np.ndarray:
-        self.oprec.float_sign(x.size)
+        self.oprec.sign(x.size)
         return (x >= 0.) * 2. - 1.
 
     def _clip(self, x: np.ndarray, momenta: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        self.oprec.float_comparison(x.size * 2)  # x > 1, x < -1
+        self.oprec.comparison(x.size * 2)  # x > 1, x < -1
         self.oprec.bitwise_or(x.size)  # np.bitwise_or
         self.oprec.conditional_fill(momenta.size)
         momenta[np.where(np.bitwise_or(x > 1, x < -1))] = 0
+
         self.oprec.clip(x.size)
         x = np.clip(x, -1, 1)
+
         return x, momenta
 
     def initialize_vector(self, length: int) -> np.ndarray:
@@ -83,16 +90,15 @@ class ISimulatedBifurcation(IAlgorithm):
 
         for t in range(self.euler_steps):
             self.history.record(ENERGY, self.compute_energy(self._binarize(x), problem))
-            self.history.record(OLS)
-            self.history.record(ILS)
+            self.history.record(MAIN_LOOP)
+            self.history.record(SEQUENCE)
 
             a = self.a_scheduler.update(t, self.euler_steps)
 
             # Euler's method: solving differential equations iteratively.
-            momenta += self._compute_momenta_variation(x, a, c0, problem)
-            self.oprec.float_addition(momenta.size)
-            x += self._compute_position_variation(momenta)
-            self.oprec.float_addition(x.size)
+            momenta = self._compute_momenta_variation(momenta, x, a, c0, problem)
+            x = self._compute_position_variation(x, momenta)
+
             x, momenta = self._clip(x, momenta)  # "Inelastic walls" to reduce the "analog errors"
 
         x = self._binarize(x)  # We turn the real-values into a valid combinatorial solution.
@@ -103,28 +109,46 @@ class ISimulatedBifurcation(IAlgorithm):
 class IDiscreteSimulatedBifurcation(ISimulatedBifurcation):
     """Ising model version of DSB."""
 
-    def _compute_momenta_variation(self, x: np.ndarray, a: float, c0: float, problem: IsingData) -> np.ndarray:
+    def _compute_momenta_variation(self, momenta: np.ndarray, x: np.ndarray, a: float, c0: float,
+                                   problem: IsingData) -> np.ndarray:
+        binarized_x = self._binarize(x)
+
         self.oprec.dot_product(problem.extra['symmetric_J'], x)
-        self.oprec.float_addition(x.size)  # ... + problem.h
-        self.oprec.float_multiplication(x.size)  # c0 * ...
-        self.oprec.float_subtraction(1)  # a - self.a0
-        self.oprec.float_multiplication(x.size)  # ((a - self.a0) * x)
-        self.oprec.float_addition(x.size)  # ... + ...
-        self.oprec.float_multiplication(x.size)  # self.delta_t * ...
-        return self.delta_t * (((a - self.a0) * x) + (
-                c0 * (np.dot(problem.extra['symmetric_J'], self._binarize(x)) + problem.h)))
+        self.oprec.addition(x.size)  # ... + problem.h
+        energy_term = np.dot(problem.extra['symmetric_J'], binarized_x) + problem.h
+
+        self.oprec.subtraction(1)  # a - self.a0
+        self.oprec.multiplication(x.size)  # (a - self.a0) * x
+        lasting_term = (a - self.a0) * x
+
+        self.oprec.multiplication(x.size)  # c0 * ...
+        self.oprec.addition(x.size)  # ... + ...
+        self.oprec.multiplication(x.size)  # self.delta_t * ...
+        momenta_delta = self.delta_t * (lasting_term + c0 * energy_term)
+
+        self.oprec.addition(momenta.size)
+        momenta += momenta_delta
+        return momenta
 
 
 class IBallisticSimulatedBifurcation(ISimulatedBifurcation):
     """Ising model version of BSB."""
 
-    def _compute_momenta_variation(self, x: np.ndarray, a: float, c0: float, problem: IsingData) -> np.ndarray:
+    def _compute_momenta_variation(self, momenta: np.ndarray, x: np.ndarray, a: float, c0: float,
+                                   problem: IsingData) -> np.ndarray:
         self.oprec.dot_product(problem.extra['symmetric_J'], x)
-        self.oprec.float_addition(x.size)  # ... + problem.h
-        self.oprec.float_multiplication(x.size)  # c0 * ...
-        self.oprec.float_subtraction(1)  # a - self.a0
-        self.oprec.float_multiplication(x.size)  # ((a - self.a0) * x)
-        self.oprec.float_addition(x.size)  # ... + ...
-        self.oprec.float_multiplication(x.size)  # self.delta_t * ...
-        return self.delta_t * (
-                -((self.a0 - a) * x) + (c0 * (np.dot(problem.extra['symmetric_J'], x) + problem.h)))
+        self.oprec.addition(x.size)  # ... + problem.h
+        energy_term = np.dot(problem.extra['symmetric_J'], x) + problem.h
+
+        self.oprec.subtraction(1)  # a - self.a0
+        self.oprec.multiplication(x.size)  # (a - self.a0) * x
+        lasting_term = (a - self.a0) * x
+
+        self.oprec.multiplication(x.size)  # c0 * ...
+        self.oprec.addition(x.size)  # ... + ...
+        self.oprec.multiplication(x.size)  # self.delta_t * ...
+        momenta_delta = self.delta_t * (lasting_term + c0 * energy_term)
+
+        self.oprec.addition(momenta.size)
+        momenta += momenta_delta
+        return momenta

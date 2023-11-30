@@ -90,13 +90,14 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
         # exp(-delta_energy / temperature) in [0,1] too and then, the change is accepted in a probabilistic
         # way, with decreasing chances as the energy increase becomes larger.
 
-        self.oprec.float_sign_flip()  # -delta_energy
-        self.oprec.float_division()  # / temperature
-        self.oprec.float_exp()  # math.exp
-        self.oprec.random_number_generation(1)  # random.random()
-        self.oprec.float_comparison()  # >
+        self.oprec.sign_flip()  # -delta_energy
+        self.oprec.division()  # / temperature
+        self.oprec.exp()  # math.exp
+        probability = math.exp(min(-delta_energy / temperature, 1))  # min() to avoid math range error
 
-        return math.exp(min(-delta_energy / temperature, 1)) > random.random()
+        self.oprec.random_number_generation(1)  # random.random()
+        self.oprec.comparison()  # >
+        return probability > random.random()
 
     def __call__(self, problem: ProblemData) -> Tuple[np.ndarray, History]:
         self.initialize_history_and_opset()
@@ -115,14 +116,14 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
 
         for t in range(self.monte_carlo_steps):
             self.history.record(ENERGY, self._select_best_energy_among_trotters(x, problem))
-            self.history.record(OLS)
+            self.history.record(MAIN_LOOP)
             temperature = self.temperature_scheduler.update(t, self.monte_carlo_steps)
             transverse_field = self.transverse_field_scheduler.update(t, self.monte_carlo_steps)
             replicas_coupling_strength = self._compute_replicas_coupling_strength(temperature, transverse_field)
 
             for i in self.sampler(length):
                 for m in self.sampler(self.n_trotters):
-                    self.history.record(ILS)
+                    self.history.record(SEQUENCE)
                     replica_coupling_penalty = self._compute_replica_coupling_penalty(x, replicas_coupling_strength,
                                                                                       i, m)
                     delta_energy = self._compute_energy_delta(x, local_energy, i, m, problem)
@@ -149,21 +150,24 @@ class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
         self.oprec.value_check()  # 1 if x[i] == 0 else -1
         flip_direction = 1 if x[i, m] == 0 else -1  # x_after - x_before
 
-        self.oprec.float_multiplication()  # 2 * x[i, m]
-        self.oprec.float_sign_flip()  # - (2 * x[i, m])
-        self.oprec.float_addition()  # 1 - ...
-        self.oprec.float_multiplication()  # problem.Q[i, i] * ...
-        self.oprec.float_addition()  # local_energy[i, m] + ...
-        self.oprec.float_multiplication()  # flip_direction *
-        return flip_direction * (local_energy[i, m] + (problem.Q[i, i] * (1 - (2 * x[i, m]))))
+        self.oprec.multiplication()  # 2 * x[i, m]
+        self.oprec.addition()  # 1 - (2 * x[i, m])
+        self.oprec.multiplication()  # problem.Q[i, i] * ...
+        diagonal_term = problem.Q[i, i] * (1 - (2 * x[i, m]))
+
+        self.oprec.addition()  # local_energy[i, m] + ...
+        energy_delta = local_energy[i, m] + diagonal_term
+
+        self.oprec.multiplication()  # flip_direction *
+        return flip_direction * energy_delta
 
     def _update_local_energy(self, local_energy: np.ndarray, x: np.ndarray, i: int, m: int,
                              problem: QUBOData) -> np.ndarray:
         self.oprec.value_check()  # - 1 if x[i, m] == 0 else 1
         flip_direction = -1 if x[i, m] == 0 else 1
 
-        self.oprec.float_multiplication(problem.extra['symmetric_Q'][:, i].size)  # flip_direction * ...
-        self.oprec.float_addition(local_energy[:, m].size)  # +=
+        self.oprec.multiplication(problem.extra['symmetric_Q'][:, i].size)  # flip_direction * ...
+        self.oprec.addition(local_energy[:, m].size)  # +=
         local_energy[:, m] += flip_direction * problem.extra['symmetric_Q'][:, i]
         return local_energy
 
@@ -176,25 +180,24 @@ class QSimulatedQuantumAnnealing(QAlgorithm, SimulatedQuantumAnnealingCommon):
         self.oprec.dot_product(problem.extra['symmetric_Q'], x)
         return np.dot(problem.extra['symmetric_Q'], x)
 
-    def _compute_replica_coupling_penalty(self,
-                                          x: np.ndarray,
-                                          replicas_coupling_strength: float,
-                                          i: int,
+    def _compute_replica_coupling_penalty(self, x: np.ndarray, replicas_coupling_strength: float, i: int,
                                           m: int) -> float:
         # The coupling depends on the m-1 and m+1 trotters
         # It is supposed to penalize when the current spin takes a value different from the others, which
         # requires some modifications to work properly when using 0 or 1
         replica_coupling = 0
         if m + 1 != self.n_trotters:
-            self.oprec.float_addition()
+            self.oprec.addition()
             replica_coupling += x[i, m + 1] * 2 - 1  # Converts from {0,1} to {-1,1}
         if m != 0:
-            self.oprec.float_addition()
+            self.oprec.addition()
             replica_coupling += x[i, m - 1] * 2 - 1  # Converts from {0,1} to {-1,1}
+
         self.oprec.value_check()
         flip_direction = 2 if x[i, m] == 0 else -2  # 2 and not 1 to have the same magnitude as with Ising models
-        self.oprec.float_multiplication(2)
-        self.oprec.float_sign_flip()
+
+        self.oprec.multiplication(2)
+        self.oprec.sign_flip()
         return - replicas_coupling_strength * flip_direction * replica_coupling
 
     @staticmethod
@@ -212,15 +215,15 @@ class ISimulatedQuantumAnnealing(IAlgorithm, SimulatedQuantumAnnealingCommon):
     def _compute_energy_delta(self, x: np.ndarray, local_energy: np.ndarray, i: int, m: int,
                               problem: IsingData) -> float:
         # No quadratic[i,i] term because in Ising model the diagonal is 0
-        self.oprec.float_addition()
-        self.oprec.float_multiplication(2)
+        self.oprec.addition()
+        self.oprec.multiplication(2)  # -2 * x[i, m] * ...
         return -2 * x[i, m] * (local_energy[i, m] + problem.h[i])
 
     def _update_local_energy(self, local_energy: np.ndarray, x: np.ndarray, i: int, m: int,
                              problem: IsingData) -> np.ndarray:
-        self.oprec.float_multiplication()  # 2 * x[i, m]
-        self.oprec.float_multiplication(problem.extra['symmetric_J'][:, i].size)  # ... * ...
-        self.oprec.float_addition(local_energy[:, m].size)  # +=
+        self.oprec.multiplication()  # 2 * x[i, m]
+        self.oprec.multiplication(problem.extra['symmetric_J'][:, i].size)  # ... * ...
+        self.oprec.addition(local_energy[:, m].size)  # +=
         local_energy[:, m] += 2 * x[i, m] * problem.extra['symmetric_J'][:, i]
         return local_energy
 
@@ -233,22 +236,21 @@ class ISimulatedQuantumAnnealing(IAlgorithm, SimulatedQuantumAnnealingCommon):
         self.oprec.dot_product(problem.extra['symmetric_J'], x)
         return np.dot(problem.extra['symmetric_J'], x)
 
-    def _compute_replica_coupling_penalty(self,
-                                          x: np.ndarray,
-                                          replicas_coupling_strength: float,
-                                          i: int,
+    def _compute_replica_coupling_penalty(self, x: np.ndarray, replicas_coupling_strength: float, i: int,
                                           m: int) -> float:
         # The coupling depends on the m-1 and m+1 trotters
         replica_coupling = 0
         if m + 1 != self.n_trotters:
-            self.oprec.float_addition()
+            self.oprec.addition()
             replica_coupling += x[i, m + 1]
         if m != 0:
-            self.oprec.float_addition()
+            self.oprec.addition()
             replica_coupling += x[i, m - 1]
-        self.oprec.float_multiplication()
+
+        self.oprec.multiplication()
         flip_direction = 2 * x[i, m]
-        self.oprec.float_multiplication(2)
+
+        self.oprec.multiplication(2)
         return replicas_coupling_strength * flip_direction * replica_coupling
 
     @staticmethod

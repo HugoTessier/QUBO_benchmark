@@ -18,15 +18,15 @@ if __name__ == '__main__':
     baseline_ising = ising_baseline(100, ising_data)
 
     qubo_solvers = {
-        # 'Simulated Annealing QUBO': QSimulatedAnnealing(monte_carlo_steps=nsteps),
-        # 'Simulated Quantum Annealing QUBO': QSimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
-        #                                                                n_trotters=10),
+        'Simulated Annealing QUBO': QSimulatedAnnealing(monte_carlo_steps=nsteps),
+        'Simulated Quantum Annealing QUBO': QSimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
+                                                                       n_trotters=10),
     }
 
     ising_solvers = {
-        # 'Simulated Annealing Ising': ISimulatedAnnealing(monte_carlo_steps=nsteps),
-        # 'Simulated Quantum Annealing Ising': ISimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
-        #                                                                 n_trotters=10),
+        'Simulated Annealing Ising': ISimulatedAnnealing(monte_carlo_steps=nsteps),
+        'Simulated Quantum Annealing Ising': ISimulatedQuantumAnnealing(monte_carlo_steps=nsteps,
+                                                                        n_trotters=10),
         'Discrete Simulated Bifurcation Ising': IDiscreteSimulatedBifurcation(euler_steps=nsteps),
         'Ballistic Simulated Bifurcation Ising': IBallisticSimulatedBifurcation(euler_steps=nsteps),
         'Stochastic Simulated Annealing Ising': IStochasticSimulatedAnnealing(
@@ -41,9 +41,9 @@ if __name__ == '__main__':
             #         n_plateau=6),
             #     n_restarts=150)
         ),
-        # 'Stochastic Simulated Quantum Annealing Ising': IStochasticSimulatedQuantumAnnealing(
-        #     monte_carlo_steps=nsteps, n_trotters=10,
-        # ),
+        'Stochastic Simulated Quantum Annealing Ising': IStochasticSimulatedQuantumAnnealing(
+            monte_carlo_steps=nsteps, n_trotters=10,
+        ),
         'Simulated Coherent Ising Machines': SimulatedCoherentIsingMachines(n_steps=nsteps),
     }
 
@@ -54,20 +54,20 @@ if __name__ == '__main__':
     for k, v in qubo_solvers.items():
         print(k)
         _, history_sa = v(qubo_data)
-        x, y = history_sa.plot(x_key=[OLS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_key=[MAIN_LOOP], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
         ax1.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[ILS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_key=[SEQUENCE], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
         ax2.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[FLOAT_MULTIPLICATION, FLOAT_ADDITION], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_key=[MULTIPLICATION, ADDITION], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
         ax3.plot(x, y, label=k)
     for k, v in ising_solvers.items():
         print(k)
         _, history_sa = v(ising_data)
-        x, y = history_sa.plot(x_key=[OLS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_key=[MAIN_LOOP], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
         ax1.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[ILS], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_key=[SEQUENCE], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
         ax2.plot(x, y, label=k)
-        x, y = history_sa.plot(x_key=[FLOAT_MULTIPLICATION, FLOAT_ADDITION], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
+        x, y = history_sa.plot(x_key=[MULTIPLICATION, ADDITION], y_key=[ENERGY], x_mode=SUM, y_mode=INSTANT)
         ax3.plot(x, y, label=k)
     for ax in axes:
         ax.axhline(baseline_ising, label='Baseline', linestyle='dashed', color='red')
@@ -82,14 +82,3 @@ if __name__ == '__main__':
     ax3.set_ylabel('Energy')
     plt.suptitle(f'MaxCut GSET {name} ({size} nodes)')
     plt.show()
-
-    # for k, v in ising_solvers.items():
-    #     print(k)
-    #     _, history_sa = v(ising_data)
-    #     x, y = history_sa.plot(x_key=[FLOAT_MULTIPLICATION, FLOAT_ADDITION],
-    #                            y_key=[FLOAT_MULTIPLICATION, FLOAT_ADDITION], x_mode=SUM, y_mode=INSTANT)
-    #     plt.scatter(x, y, label=k)
-    # plt.legend()
-    # plt.xlabel('Total of operations')
-    # plt.ylabel('Instant operations')
-    # plt.show()
