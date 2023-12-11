@@ -6,7 +6,7 @@ import mpmath
 from typing import Tuple, Callable
 from abc import abstractmethod
 from utils.schedulers import Scheduler, LinearScheduler, HyperbolicScheduler
-from utils.sampling import range_sampler
+from utils.sampling import Sampler, RangeSampler
 from utils.data_struct import *
 from utils.history import *
 
@@ -22,7 +22,7 @@ class SimulatedQuantumAnnealingCommon(Algorithm):
                  n_trotters: int,
                  temperature_scheduler: Scheduler = HyperbolicScheduler(start=1e9, end=8 / 7),
                  transverse_field_scheduler: Scheduler = LinearScheduler(start=8.0, end=0.),
-                 sampler: Callable = range_sampler):
+                 sampler: Sampler = RangeSampler()):
         """
         :param monte_carlo_steps: Number of Monte-Carlo steps, i.e. the outermost loop of the algorithm.
         :param n_trotters: Number of replicas that are optimized in parallel and eventually fused together.

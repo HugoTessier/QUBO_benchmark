@@ -3,9 +3,9 @@ import numpy as np
 import random
 import math
 from abc import abstractmethod
-from typing import Tuple, Callable
+from typing import Tuple
 from utils.schedulers import Scheduler, GeometricScheduler
-from utils.sampling import range_sampler
+from utils.sampling import Sampler, RangeSampler
 from utils.data_struct import *
 from utils.history import *
 
@@ -19,7 +19,7 @@ class SimulatedAnnealingCommon(Algorithm):
     def __init__(self,
                  monte_carlo_steps: int,
                  temperature_scheduler: Scheduler = GeometricScheduler(start=20, multiplier=0.9),
-                 sampler: Callable = range_sampler):
+                 sampler: Sampler = RangeSampler()):
         """
         :param monte_carlo_steps: Number of Monte-Carlo steps, i.e. the outermost loop of the algorithm.
         :param temperature_scheduler: Controls the evolution of the temperature during annealing.
