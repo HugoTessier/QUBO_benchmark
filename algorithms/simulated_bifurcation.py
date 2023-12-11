@@ -17,27 +17,24 @@ class ISimulatedBifurcation(IAlgorithm):
 
     def __init__(self,
                  euler_steps: int,
-                 a0: float = 1.,
-                 a_scheduler: Scheduler = LinearScheduler(start=0., end=1.),
+                 a_scheduler: Scheduler = LinearScheduler(start=1., end=0.),
                  delta_t: float = 1.25,
                  initialization_range: float = 0.1):
         """
         :param euler_steps: Number of steps of the Euler method, i.e. the outermost loop of the algorithm.
-        :param a0: Final value of the control parameter a.
         :param a_scheduler: Controls the evolution of the control parameter a
         :param delta_t: Time step of the Euler method.
         :param initialization_range: Positions and momenta are initialized around a middle state, with a random range.
         """
         super().__init__()
         self.euler_steps = euler_steps
-        self.a0 = a0
         self.delta_t = delta_t
         self.initialization_range = initialization_range
         self.a_scheduler = a_scheduler
 
-    def _compute_position_variation(self, x: np.ndarray, momenta: np.ndarray) -> np.ndarray:
+    def _compute_position_variation(self, x: np.ndarray, momenta: np.ndarray, a0: float) -> np.ndarray:
         self.oprec.multiplication(momenta.size * 2)
-        x_delta = self.a0 * momenta * self.delta_t
+        x_delta = a0 * momenta * self.delta_t
 
         self.oprec.addition(x.size)
         x += x_delta
@@ -84,6 +81,7 @@ class ISimulatedBifurcation(IAlgorithm):
 
         length = self.get_length(problem)
         c0 = self._compute_c0(problem)
+        a0 = self.a_scheduler.update(0, self.euler_steps)
 
         x = self.initialize_vector(length)  # Positions of the element of the solution.
         momenta = self.initialize_vector(length)  # Momentum of each element of x within the search space.
@@ -97,7 +95,7 @@ class ISimulatedBifurcation(IAlgorithm):
 
             # Euler's method: solving differential equations iteratively.
             momenta = self._compute_momenta_variation(momenta, x, a, c0, problem)
-            x = self._compute_position_variation(x, momenta)
+            x = self._compute_position_variation(x, momenta, a0)
 
             x, momenta = self._clip(x, momenta)  # "Inelastic walls" to reduce the "analog errors"
 
@@ -117,9 +115,9 @@ class IDiscreteSimulatedBifurcation(ISimulatedBifurcation):
         self.oprec.addition(x.size)  # ... + problem.h
         energy_term = np.dot(problem.extra['symmetric_J'], binarized_x) + problem.h
 
-        self.oprec.subtraction(1)  # a - self.a0
+        self.oprec.sign_flip(1)  # - a
         self.oprec.multiplication(x.size)  # (a - self.a0) * x
-        lasting_term = (a - self.a0) * x
+        lasting_term = - a * x
 
         self.oprec.multiplication(x.size)  # c0 * ...
         self.oprec.addition(x.size)  # ... + ...
@@ -140,9 +138,9 @@ class IBallisticSimulatedBifurcation(ISimulatedBifurcation):
         self.oprec.addition(x.size)  # ... + problem.h
         energy_term = np.dot(problem.extra['symmetric_J'], x) + problem.h
 
-        self.oprec.subtraction(1)  # a - self.a0
+        self.oprec.sign_flip(1)  # -a
         self.oprec.multiplication(x.size)  # (a - self.a0) * x
-        lasting_term = (a - self.a0) * x
+        lasting_term = -a * x
 
         self.oprec.multiplication(x.size)  # c0 * ...
         self.oprec.addition(x.size)  # ... + ...
