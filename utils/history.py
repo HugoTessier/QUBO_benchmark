@@ -64,8 +64,29 @@ class History:
 
     # Said examples are proposed as constants right up there.
 
-    def __init__(self):
+    def __init__(self, keys_list: List[str] = None, reducer_key: str = None):
+        """
+        :param keys_list: List of keys to record (others are ignored).
+        :param reducer_key: Key between each record of which to fuse other records of same type together.
+        """
+        self.keys_list = keys_list
+        self.reducer_key = reducer_key
         self.content: List[Tuple] = []
+        self.buffer = {}
+
+    def _reduce(self):
+        data = {}
+        while len(self.content) != 0:
+            k, v = self.content[-1]
+            if k == self.reducer_key:
+                break
+            if k in data:
+                data[k] += v
+            else:
+                data[k] = v
+            self.content.pop(-1)
+        for k, v in data.items():
+            self.content.append((k, v))
 
     def record(self, key: str, value: Any = 1) -> None:
         """
@@ -74,7 +95,24 @@ class History:
         :param key: Type of the entry, e.g.: "step", "energy", "FLOPs"...
         :param value: Value of the entry (default: 1, so that it corresponds to an increment).
         """
-        self.content.append((key, value))
+        if self.reducer_key is not None:
+            if key == self.reducer_key:
+                for k, v in self.buffer.items():
+                    self.content.append((k, v))
+                self.content.append((key, value))
+            else:
+                if self.keys_list is not None:
+                    if key not in self.keys_list:
+                        return None
+                if key in self.buffer:
+                    self.buffer[key] += value
+                else:
+                    self.buffer[key] = value
+        else:
+            if self.keys_list is not None:
+                if key not in self.keys_list:
+                    return None
+            self.content.append((key, value))
 
     def plot(self, x_parser: HistoryParser, y_parser: HistoryParser) -> Tuple[List, List]:
         """

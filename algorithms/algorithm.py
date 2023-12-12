@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 import numpy as np
-from typing import Tuple
+from typing import Tuple, List
 from utils.data_struct import *
 from utils.history import History
 from utils.operations import OperationsRecorder
@@ -12,10 +12,22 @@ class Algorithm(ABC):
     def __init__(self):
         self.history: History = None
         self.oprec: OperationsRecorder = None
+        self.keys_list = None
+        self.reducer_key = None
 
     def initialize_history_and_opset(self):
-        self.history = History()
+        self.history = History(keys_list=self.keys_list, reducer_key=self.reducer_key)
         self.oprec = OperationsRecorder(self.history)
+
+    def restrict_history(self, keys_list: List[str] = None, reducer_key: str = None):
+        """
+        Since the history can get bloated quickly, these arguments allow to make it lighter.
+
+        :param keys_list: List of keys to record (others are ignored).
+        :param reducer_key: Key between each record of which to fuse other records of same type together.
+        """
+        self.keys_list = keys_list
+        self.reducer_key = reducer_key
 
     @staticmethod
     @abstractmethod
