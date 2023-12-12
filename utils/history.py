@@ -74,20 +74,6 @@ class History:
         self.content: List[Tuple] = []
         self.buffer = {}
 
-    def _reduce(self):
-        data = {}
-        while len(self.content) != 0:
-            k, v = self.content[-1]
-            if k == self.reducer_key:
-                break
-            if k in data:
-                data[k] += v
-            else:
-                data[k] = v
-            self.content.pop(-1)
-        for k, v in data.items():
-            self.content.append((k, v))
-
     def record(self, key: str, value: Any = 1) -> None:
         """
         Record an entry.
@@ -99,6 +85,7 @@ class History:
             if key == self.reducer_key:
                 for k, v in self.buffer.items():
                     self.content.append((k, v))
+                self.buffer = {}
                 self.content.append((key, value))
             else:
                 if self.keys_list is not None:
